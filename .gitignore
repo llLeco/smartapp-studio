@@ -1,0 +1,23 @@
+# Build/cache
+node_modules
+.next
+.turbo
+.cache
+dist
+build
+out
+
+# OS / IDE
+.DS_Store
+.vscode
+.idea
+
+# Secrets / logs
+.env
+*.log
+
+# Export
+*.zip
+*.json
+*.md
+
