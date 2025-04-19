@@ -3,11 +3,19 @@ import ReactMarkdown from 'react-markdown';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ClipboardDocumentIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import styled from 'styled-components';
+import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
+import javascript from 'react-syntax-highlighter/dist/cjs/languages/prism/javascript';
+import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
+import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
+import { FaClipboard, FaClipboardCheck } from 'react-icons/fa';
+import type { Components } from 'react-markdown';
+import { CodeProps } from 'react-markdown/lib/ast-to-react';
+import { ReactMarkdownProps } from 'react-markdown/lib/complex-types';
 
-// Importar estilos do Prism (tema dark)
-// Você precisará adicionar isso ao seu projeto ou importar via NPM
+// Import Prism styles (dark theme)
 import 'prismjs/themes/prism-tomorrow.css';
-// Importar linguagens adicionais
+// Import additional languages
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-jsx';
@@ -18,19 +26,75 @@ import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-solidity';
 
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('python', python);
+
+const Container = styled.div`
+  pre {
+    border-radius: 5px;
+    position: relative;
+    padding: 20px;
+  }
+
+  p code {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  ul,
+  ol {
+    margin-left: 20px;
+  }
+
+  blockquote {
+    margin-left: 0;
+    padding-left: 10px;
+    border-left: 4px solid #ddd;
+    color: #777;
+  }
+
+  a {
+    color: #0066cc;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  h1 {
+    font-size: 1.7rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    margin-top: 1.3rem;
+    margin-bottom: 0.8rem;
+  }
+
+  h3 {
+    font-size: 1.3rem;
+    margin-top: 1.1rem;
+    margin-bottom: 0.6rem;
+  }
+
+  h4 {
+    font-size: 1.1rem;
+    margin-top: 1rem;
+    margin-bottom: 0.4rem;
+  }
+`;
+
 interface StructureViewProps {
   markdown: string;
-  content?: string; // Adding backward compatibility
 }
 
-interface CodeBlockProps {
-  node?: any;
-  inline?: boolean;
-  className?: string;
-  children?: React.ReactNode;
-}
-
-const CodeBlock: React.FC<CodeBlockProps> = ({ node, inline, className, children, ...props }) => {
+const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) => {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : '';
@@ -42,87 +106,75 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ node, inline, className, children
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!inline && match) {
-    return (
-      <div className="relative group">
-        <div className="absolute right-2 top-2">
-          <button 
-            onClick={copyToClipboard}
-            className="p-1 rounded bg-gray-700 text-white hover:bg-gray-600 transition-colors"
-            title="Copy code"
-          >
-            {copied ? (
-              <ClipboardDocumentCheckIcon className="w-4 h-4 text-green-400" />
-            ) : (
-              <ClipboardDocumentIcon className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-        <SyntaxHighlighter
-          language={language}
-          style={vscDarkPlus}
-          customStyle={{ marginTop: 0 }}
-          {...props}
-        >
-          {code}
-        </SyntaxHighlighter>
-      </div>
-    );
+  if (inline) {
+    return <code className={className} {...props}>{children}</code>;
   }
 
   return (
-    <code className={className} {...props}>
-      {children}
-    </code>
-  );
-};
-
-const StructureView: React.FC<StructureViewProps> = ({ markdown, content }) => {
-  // Support backward compatibility with content prop
-  const markdownContent = markdown || content;
-  
-  if (!markdownContent) {
-    return <div className="p-4 text-gray-300">No content to display</div>;
-  }
-
-  return (
-    <div className="p-4 overflow-auto">
-      <ReactMarkdown
-        components={{
-          h1: ({ children, ...props }: React.PropsWithChildren<{}>) => <h1 className="text-2xl font-bold mb-4 mt-6 text-white" {...props}>{children}</h1>,
-          h2: ({ children, ...props }: React.PropsWithChildren<{}>) => <h2 className="text-xl font-bold mb-3 mt-5 text-white" {...props}>{children}</h2>,
-          h3: ({ children, ...props }: React.PropsWithChildren<{}>) => <h3 className="text-lg font-bold mb-2 mt-4 text-white" {...props}>{children}</h3>,
-          h4: ({ children, ...props }: React.PropsWithChildren<{}>) => <h4 className="text-base font-bold mb-2 mt-3 text-white" {...props}>{children}</h4>,
-          p: ({ children, ...props }: React.PropsWithChildren<{}>) => <p className="mb-4 text-gray-200 leading-relaxed" {...props}>{children}</p>,
-          ul: ({ children, ...props }: React.PropsWithChildren<{}>) => <ul className="list-disc pl-5 mb-4 text-gray-200" {...props}>{children}</ul>,
-          ol: ({ children, ...props }: React.PropsWithChildren<{}>) => <ol className="list-decimal pl-5 mb-4 text-gray-200" {...props}>{children}</ol>,
-          li: ({ children, ...props }: React.PropsWithChildren<{}>) => <li className="mb-1 text-gray-200" {...props}>{children}</li>,
-          a: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-            <a 
-              href={href} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-blue-400 hover:underline" 
-              {...props}
-            >
-              {children}
-            </a>
-          ),
-          blockquote: ({ children, ...props }: React.PropsWithChildren<{}>) => (
-            <blockquote 
-              className="pl-4 italic border-l-4 border-gray-400 text-gray-300 mb-4" 
-              {...props}
-            >
-              {children}
-            </blockquote>
-          ),
-          code: CodeBlock,
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={copyToClipboard}
+        style={{
+          position: 'absolute',
+          top: '5px',
+          right: '5px',
+          background: 'transparent',
+          border: 'none',
+          color: '#ccc',
+          cursor: 'pointer',
+          zIndex: 10,
         }}
       >
-        {markdownContent}
-      </ReactMarkdown>
+        {copied ? <FaClipboardCheck size={18} /> : <FaClipboard size={18} />}
+      </button>
+      <SyntaxHighlighter
+        language={language}
+        style={vscDarkPlus}
+        customStyle={{ padding: '35px 15px 15px 15px' }}
+        {...props}
+      >
+        {code}
+      </SyntaxHighlighter>
     </div>
   );
 };
 
-export default StructureView; 
+type HeadingProps = {
+  level: number;
+  children?: React.ReactNode;
+};
+
+type LinkComponentProps = {
+  href?: string;
+  children?: React.ReactNode;
+};
+
+type GenericComponentProps = {
+  children?: React.ReactNode;
+};
+
+export default function StructureView({ markdown }: StructureViewProps) {
+  const components: Components = {
+    code: CodeBlock,
+    h1: ({ children }: GenericComponentProps) => <h1>{children}</h1>,
+    h2: ({ children }: GenericComponentProps) => <h2>{children}</h2>,
+    h3: ({ children }: GenericComponentProps) => <h3>{children}</h3>,
+    h4: ({ children }: GenericComponentProps) => <h4>{children}</h4>,
+    p: ({ children }: GenericComponentProps) => <p>{children}</p>,
+    ul: ({ children }: GenericComponentProps) => <ul>{children}</ul>,
+    ol: ({ children }: GenericComponentProps) => <ol>{children}</ol>,
+    li: ({ children }: GenericComponentProps) => <li>{children}</li>,
+    a: ({ href, children }: LinkComponentProps) => (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ),
+    blockquote: ({ children }: GenericComponentProps) => <blockquote>{children}</blockquote>,
+  };
+
+  return (
+    <Container>
+      <ReactMarkdown components={components}>{markdown}</ReactMarkdown>
+    </Container>
+  );
+} 

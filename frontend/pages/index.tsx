@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import Chat from '../components/Chat';
 import Sidebar from '../components/Sidebar';
+import WalletConnectButton from '../components/WalletConnectButton';
+import WalletBalance from '../components/WalletBalance';
+import ActiveSessions from '../components/ActiveSessions';
 
 // Componente para criar estrelas no fundo
 const Stars = () => {
@@ -71,7 +74,8 @@ export default function Home() {
 
   const handleSendMessage = async (message: string): Promise<string> => {
     try {
-      const response = await fetch('http://localhost:3001/api/generate', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+      const response = await fetch(`${apiUrl}/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,8 +135,10 @@ export default function Home() {
             <h1 className="text-white/90 font-medium">SmartApp Studio</h1>
           </div>
           
-          <div className="w-20">
-            {/* Empty div for flex balance */}
+          <div className="w-auto flex justify-end items-center">
+            <WalletBalance />
+            <WalletConnectButton />
+            <ActiveSessions />
           </div>
         </div>
         

@@ -9,8 +9,8 @@ import {
   FolderIcon,
   DocumentIcon
 } from '@heroicons/react/24/outline';
-import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 interface StructurePanelProps {
   content: string | null;
