@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { useWallet } from '../hooks/useWallet';
+import Head from 'next/head';
 import Chat from '../components/Chat';
 import Sidebar from '../components/Sidebar';
 import WalletConnectButton from '../components/WalletConnectButton';
@@ -63,14 +66,28 @@ const OrbitingParticles = () => {
   return <div className="fixed inset-0 z-0 overflow-hidden">{particles}</div>;
 };
 
-export default function Home() {
+const Home = () => {
+  const router = useRouter();
+  const { isConnected, accountId } = useWallet();
   const [generatedStructure, setGeneratedStructure] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [testMode, setTestMode] = useState(true); // Modo de teste ativado por padrão
 
   // Esperar pelo client-side rendering para evitar problemas de hidratação
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Não redireciona mais automaticamente se estiver em modo de teste
+  useEffect(() => {
+    if (!testMode) {
+      if (isConnected && accountId) {
+        router.push('/app');
+      } else {
+        router.push('/get-access');
+      }
+    }
+  }, [isConnected, accountId, router, testMode]);
 
   const handleSendMessage = async (message: string): Promise<string> => {
     try {
@@ -104,10 +121,36 @@ export default function Home() {
     setGeneratedStructure(null);
   };
 
+  // Alternar entre modo de teste e modo normal
+  const toggleTestMode = () => {
+    setTestMode(!testMode);
+  };
+
   if (!mounted) return null;
 
+  // Interface de carregamento removida
+  // Em vez disso, renderiza sempre a interface do chat em modo de teste
   return (
     <div className="flex flex-col h-screen items-center justify-center p-8 relative">
+      {/* Botão de modo de teste */}
+      <div className="absolute top-2 right-2 z-20">
+        <button 
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            testMode 
+              ? 'bg-green-500 text-white' 
+              : 'bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+          }`}
+          onClick={toggleTestMode}
+        >
+          {testMode ? 'Modo de Teste Ativo' : 'Ativar Modo de Teste'}
+        </button>
+        {testMode && (
+          <div className="mt-2 bg-yellow-100 dark:bg-yellow-900 p-2 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
+            Token gate desativado para testes
+          </div>
+        )}
+      </div>
+      
       {/* Background elements */}
       <Stars />
       <OrbitingParticles />
@@ -135,7 +178,7 @@ export default function Home() {
             <h1 className="text-white/90 font-medium">SmartApp Studio</h1>
           </div>
           
-          <div className="w-auto flex justify-end items-center">
+          <div className="w-auto flex justify-end items-center gap-2">
             <WalletBalance />
             <WalletConnectButton />
             <ActiveSessions />
@@ -165,4 +208,6 @@ export default function Home() {
       <div className="fixed bottom-1/3 -right-20 w-80 h-80 bg-indigo-600/20 rounded-full filter blur-[100px] z-0"></div>
     </div>
   );
-} 
+};
+
+export default Home; 
