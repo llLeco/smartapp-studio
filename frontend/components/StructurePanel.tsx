@@ -242,7 +242,7 @@ export default function StructurePanel({ content }: StructurePanelProps) {
   }
 
   return (
-    <div className="flex flex-col space-y-4 p-4 overflow-auto">
+    <div className="flex flex-col space-y-4 p-4 overflow-auto scrollbar-custom">
       {/* Resumo informativo */}
       <div className="glass p-4 rounded-xl">
         <h3 className="text-sm font-medium mb-3 text-white/90 border-b border-white/10 pb-2">

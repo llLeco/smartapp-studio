@@ -22,7 +22,6 @@ export interface NftMetadata {
   creator?: string;
   createdAt?: string;
   type: string;
-  additionalProperties?: Record<string, any>;
 }
 
 export interface NftInfo {
@@ -356,5 +355,117 @@ export async function checkLicenseValidity(accountId: string) {
   } catch (e) {
     console.error('Error checking license validity:', e);
     return { isValid: false, licenseInfo: null, usageInfo: null };
+  }
+}
+
+// --- Project Management ---
+export async function createNewProject(
+  licenseTopic: string, 
+  accountId: string,
+  projectName: string
+): Promise<{ success: boolean; projectTopicId: string; error?: string }> {
+  try {
+    // Create a new topic for the project via backend
+    const createRes = await fetch(api("/api/hedera/createProjectTopic"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        projectName,
+        ownerAccountId: accountId
+      }),
+    });
+    
+    if (!createRes.ok) {
+      const errorData = await createRes.json();
+      throw new Error(errorData.error || 'Failed to create project topic');
+    }
+    
+    const { success, data: projectTopicId, error } = await createRes.json();
+    
+    if (!success || !projectTopicId) {
+      throw new Error(error || 'Failed to create project topic');
+    }
+    
+    console.log(`Project topic created: ${projectTopicId}`);
+    
+    // Link the project to the license by recording a message in the license topic
+    const linkRes = await fetch(api("/api/hedera/recordProjectMessage"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        licenseTopic,
+        projectTopicId,
+        accountId,
+        projectName,
+        timestamp: new Date().toISOString()
+      }),
+    });
+    
+    if (!linkRes.ok) {
+      const errorData = await linkRes.json();
+      throw new Error(errorData.error || 'Failed to record project in license');
+    }
+    
+    const linkData = await linkRes.json();
+    
+    if (!linkData.success) {
+      throw new Error(linkData.error || 'Failed to record project in license');
+    }
+    
+    return {
+      success: true,
+      projectTopicId
+    };
+  } catch (error: any) {
+    console.error('Error creating new project:', error);
+    return {
+      success: false,
+      projectTopicId: '',
+      error: error.message || 'Failed to create new project'
+    };
+  }
+}
+
+// --- Project Retrieval ---
+export interface Project {
+  projectTopicId: string;
+  projectName: string;
+  createdAt: string;
+  ownerAccountId: string;
+}
+
+export async function getUserProjects(licenseTopic: string): Promise<Project[]> {
+  try {
+    // Get all messages from the license topic
+    const messagesRes = await fetch(api(`/api/hedera/topicMessages?topicId=${licenseTopic}`));
+    
+    if (!messagesRes.ok) {
+      throw new Error('Failed to fetch topic messages');
+    }
+    
+    const { success, data: messages, error } = await messagesRes.json();
+    
+    if (!success || !messages) {
+      throw new Error(error || 'Failed to fetch topic messages');
+    }
+    
+    // Filter messages to find project creation messages
+    const projectMessages = messages.filter((msg: any) => 
+      msg.content && msg.content.type === 'PROJECT_CREATED'
+    );
+    
+    // Extract project data from messages
+    const projects: Project[] = projectMessages.map((msg: any) => ({
+      projectTopicId: msg.content.projectTopicId,
+      projectName: msg.content.projectName,
+      createdAt: msg.content.createdAt,
+      ownerAccountId: msg.content.ownerAccountId
+    }));
+    
+    console.log(`Found ${projects.length} projects for license topic ${licenseTopic}`);
+    return projects;
+  } catch (error: any) {
+    console.error('Error fetching user projects:', error);
+    return [];
   }
 }

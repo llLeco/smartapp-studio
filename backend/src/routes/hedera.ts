@@ -14,7 +14,9 @@ import {
   transferLicense,
   executeSignedTransaction,
   getLicenseTokenId,
-  getOperatorId
+  getOperatorId,
+  createProjectTopic,
+  recordProjectToLicense
 } from '../services/hederaService';
 
 const router = express.Router();
@@ -248,6 +250,51 @@ router.get('/getOperatorId', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('getOperatorId error', err);
     res.status(500).json({ success: false, error: 'Failed to get operator ID' });
+  }
+});
+
+// POST /api/hedera/createProjectTopic
+router.post('/createProjectTopic', async (req: Request, res: Response) => {
+  try {
+    const { projectName, ownerAccountId } = req.body;
+    
+    if (!projectName) {
+      return res.status(400).json({ success: false, error: 'Project name is required' });
+    }
+    
+    const projectTopic = await createProjectTopic(projectName, ownerAccountId);
+    
+    res.json({ success: true, data: projectTopic });
+  } catch (err) {
+    console.error('createProjectTopic error', err);
+    res.status(500).json({ success: false, error: 'Failed to create project topic' });
+  }
+});
+
+// POST /api/hedera/recordProjectMessage
+router.post('/recordProjectMessage', async (req: Request, res: Response) => {
+  try {
+    const { licenseTopic, projectTopicId, accountId, projectName, timestamp } = req.body;
+    
+    if (!licenseTopic || !projectTopicId || !accountId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'License topic, project topic, and account ID are required' 
+      });
+    }
+    
+    const messageId = await recordProjectToLicense(
+      licenseTopic, 
+      projectTopicId, 
+      accountId, 
+      projectName,
+      timestamp
+    );
+    
+    res.json({ success: true, data: messageId });
+  } catch (err) {
+    console.error('recordProjectMessage error', err);
+    res.status(500).json({ success: false, error: 'Failed to record project message' });
   }
 });
 

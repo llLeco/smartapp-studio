@@ -16,7 +16,7 @@ export default function Sidebar({ generatedStructure }: SidebarProps) {
         <h2 className="text-sm font-medium text-white/70">Estrutura Gerada</h2>
       </div>
       
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto scrollbar-custom">
         <StructurePanel content={generatedStructure} />
       </div>
     </div>
