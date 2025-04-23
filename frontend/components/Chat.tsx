@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import ReactMarkdown from 'react-markdown';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 interface Message {
   id: string;
@@ -8,18 +11,41 @@ interface Message {
   timestamp: Date;
 }
 
+// Interface for messages from the Hedera topic
+interface TopicMessage {
+  id: string;
+  question: string;
+  answer: string;
+  timestamp: string;
+}
+
+// Interface for pinned items
+interface PinnedItem {
+  id: string;
+  type: 'code' | 'link';
+  content: string;
+  language?: string;
+  title: string;
+  url?: string;
+  autoDetected?: boolean;
+  importance?: number; // Higher value means more important
+}
+
 export interface ChatProps {
   onSendMessage: (message: string) => Promise<string>;
   generatedStructure: string | null;
+  setPinnedItems?: (items: PinnedItem[]) => void;
 }
 
-const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
+const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinnedItems }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { topicId } = router.query;
+  const [localPinnedItems, setLocalPinnedItems] = useState<PinnedItem[]>([]);
 
   useEffect(() => {
     // Carregar mensagens se houver um topicId
@@ -28,14 +54,82 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
     }
   }, [topicId]);
 
+  // Process all existing messages to extract useful content when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      console.log("🔍 Processing all messages for useful content");
+      const items: PinnedItem[] = [];
+      
+      // Process each message from assistant
+      messages.forEach(message => {
+        if (message.role === 'assistant') {
+          // Get items from this message
+          const messageItems = extractUsefulContent(message.content);
+          // Add to overall items array
+          items.push(...messageItems);
+        }
+      });
+      
+      console.log(`🔍 Found ${items.length} total items from all messages`);
+      
+      // Update local state
+      setLocalPinnedItems(items);
+      
+      // Also update parent component if the function is provided
+      if (setPinnedItems) {
+        setPinnedItems(items);
+      }
+    }
+  }, [messages, setPinnedItems]);
+
   const loadMessagesFromTopic = async (id: string) => {
     try {
-      // Aqui você poderia implementar a lógica para carregar mensagens
-      // do topicId específico usando um endpoint do backend
+      setIsLoadingHistory(true);
       console.log(`Carregando mensagens do tópico: ${id}`);
       
-      // Por enquanto, simulamos uma mensagem de boas-vindas para o tópico
-      if (messages.length === 0) {
+      // Fetch messages from the API
+      const response = await fetch(`/api/chat-messages?topicId=${id}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch messages: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.messages && Array.isArray(data.messages)) {
+        // Convert topic messages to chat messages format
+        const chatMessages: Message[] = [];
+        
+        // Sort messages by timestamp (oldest first)
+        const sortedMessages = [...data.messages].sort((a: TopicMessage, b: TopicMessage) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        
+        // Convert each topic message to two chat messages (user and assistant)
+        sortedMessages.forEach((msg: TopicMessage, index: number) => {
+          // Add user message with unique index to prevent duplicate keys
+          chatMessages.push({
+            id: `user-${msg.id}-${index}`,
+            role: 'user',
+            content: msg.question,
+            timestamp: new Date(msg.timestamp)
+          });
+          
+          // Add assistant message with unique index to prevent duplicate keys
+          chatMessages.push({
+            id: `assistant-${msg.id}-${index}`,
+            role: 'assistant',
+            content: msg.answer,
+            timestamp: new Date(msg.timestamp)
+          });
+        });
+        
+        // Update state with loaded messages
+        setMessages(chatMessages);
+        
+        console.log(`Loaded ${chatMessages.length} messages from topic ${id}`);
+      } else {
+        // If no messages were found, add a welcome message
         setMessages([
           {
             id: 'welcome',
@@ -47,6 +141,17 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
       }
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
+      // Add a welcome message on error
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: `Bem-vindo ao chat. Houve um erro ao carregar o histórico, mas podemos continuar a conversa.`,
+          timestamp: new Date()
+        }
+      ]);
+    } finally {
+      setIsLoadingHistory(false);
     }
   };
 
@@ -54,11 +159,168 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
     if (!topicId) return;
     
     try {
-      // Aqui você implementaria a lógica para salvar a mensagem no tópico
-      // usando um endpoint do backend
-      console.log(`Salvando mensagem no tópico ${topicId}:`, message);
+      // This is handled by the backend now via the askAssistant function
+      // We just need to log for debugging
+      console.log(`Message to topic ${topicId}:`, message);
     } catch (error) {
       console.error('Erro ao salvar mensagem:', error);
+    }
+  };
+
+  // Function to extract useful content from a message (doesn't save to localStorage)
+  const extractUsefulContent = (content: string): PinnedItem[] => {
+    console.log("🔍 Extracting useful content");
+    console.log("🔍 Content type:", typeof content);
+    console.log("🔍 Content length:", content?.length);
+    
+    // Safety check for content
+    if (!content || typeof content !== 'string' || content.length === 0) {
+      console.error("🔴 Invalid content provided to extractUsefulContent:", content);
+      return [];
+    }
+    
+    try {
+      const items: PinnedItem[] = [];
+      let codeBlocksFound = 0;
+      let linksFound = 0;
+      let urlsFound = 0;
+      
+      // Debugging the content looking for code blocks
+      console.log("🔍 Content includes '```':", content.includes("```"));
+      if (content.includes("```")) {
+        console.log("🔍 Position of first code block:", content.indexOf("```"));
+        const parts = content.split("```");
+        console.log("🔍 Number of parts after splitting by ```:", parts.length);
+      }
+      
+      // 1. Detect code blocks - using more robust regex
+      const codeBlockRegex = /```(\w*)\n?([\s\S]+?)```/g;
+      let codeMatch;
+      
+      // Manual test of regex
+      const testMatches = [];
+      let testMatch;
+      while ((testMatch = codeBlockRegex.exec(content.slice())) !== null) {
+        testMatches.push(testMatch);
+      }
+      console.log("🔍 Code block match test results:", testMatches);
+      
+      while ((codeMatch = codeBlockRegex.exec(content)) !== null) {
+        codeBlocksFound++;
+        const language = codeMatch[1].trim() || "text";
+        const code = codeMatch[2].trim();
+        
+        console.log(`🔍 CODE BLOCK #${codeBlocksFound} FOUND!`);
+        console.log(`🔍 Language: "${language}"`);
+        console.log(`🔍 Code preview: "${code.substring(0, 50)}..."`);
+        
+        // Add code block
+        const newItem = {
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+          type: 'code' as 'code',
+          content: code,
+          language,
+          title: `${language.charAt(0).toUpperCase() + language.slice(1)} Snippet ${codeBlocksFound}`,
+          autoDetected: true
+        };
+        
+        console.log("🔍 Adding new code block item:", newItem);
+        items.push(newItem);
+      }
+      
+      // 2. Detect links with markdown format
+      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let linkMatch;
+      
+      while ((linkMatch = linkRegex.exec(content)) !== null) {
+        linksFound++;
+        const linkText = linkMatch[1];
+        const url = linkMatch[2];
+        
+        console.log(`🔍 MARKDOWN LINK #${linksFound} FOUND!`);
+        console.log(`🔍 Link text: "${linkText}"`);
+        console.log(`🔍 URL: "${url}"`);
+        
+        const newItem = {
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+          type: 'link' as 'link',
+          content: url,
+          title: linkText,
+          url,
+          autoDetected: true
+        };
+        
+        console.log("🔍 Adding new markdown link item:", newItem);
+        items.push(newItem);
+      }
+      
+      // 3. Look for plain URLs in text
+      const urlRegex = /(https?:\/\/[^\s'")<>]+)/g;
+      let urlMatch;
+      
+      while ((urlMatch = urlRegex.exec(content)) !== null) {
+        urlsFound++;
+        const url = urlMatch[1];
+        
+        // Skip markdown URLs we already processed
+        if (content.includes(`](${url})`)) {
+          continue;
+        }
+        
+        console.log(`🔍 PLAIN URL #${urlsFound} FOUND!`);
+        console.log(`🔍 URL: "${url}"`);
+        
+        // Try to get domain as title
+        let title;
+        try {
+          const urlObj = new URL(url);
+          title = urlObj.hostname.replace('www.', '');
+        } catch {
+          title = 'Link';
+        }
+        
+        const newItem = {
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+          type: 'link' as 'link',
+          content: url,
+          title,
+          url,
+          autoDetected: true
+        };
+        
+        console.log("🔍 Adding new plain URL item:", newItem);
+        items.push(newItem);
+      }
+      
+      console.log(`🔍 DETECTION SUMMARY: ${codeBlocksFound} code blocks, ${linksFound} markdown links, ${urlsFound} plain URLs`);
+      return items;
+      
+    } catch (error) {
+      console.error('🔴 ERROR in extractUsefulContent:', error);
+      return [];
+    }
+  };
+
+  // Function to auto-detect useful content from an assistant message
+  const processNewMessage = (content: string) => {
+    console.log("🔍 Processing new message for useful content");
+    
+    // Extract items from the new message
+    const newItems = extractUsefulContent(content);
+    
+    if (newItems.length > 0) {
+      // Combine with existing items
+      const updatedItems = [...localPinnedItems, ...newItems];
+      
+      // Update local state
+      setLocalPinnedItems(updatedItems);
+      
+      // Also update parent component if the function is provided
+      if (setPinnedItems) {
+        setPinnedItems(updatedItems);
+      }
+      
+      console.log(`🔍 Added ${newItems.length} new items, total: ${updatedItems.length}`);
     }
   };
 
@@ -77,6 +339,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
       timestamp: new Date()
     };
     
+    console.log("🔄 User message:", input);
     setMessages(prevMessages => [...prevMessages, userMessage]);
     setInput('');
     setIsLoading(true);
@@ -86,7 +349,16 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
       await saveMessageToTopic(userMessage);
       
       // Get response from AI
+      console.log("🔄 Calling onSendMessage with input:", input);
       const response = await onSendMessage(input);
+      console.log("🔄 Received response from AI:", response);
+      console.log("🔄 Response type:", typeof response);
+      console.log("🔄 Response length:", response?.length);
+      
+      // Verify response
+      if (!response) {
+        console.error("🔴 Empty response received from AI");
+      }
       
       // Create assistant message
       const assistantMessage: Message = {
@@ -100,8 +372,13 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
       
       // Save assistant message
       await saveMessageToTopic(assistantMessage);
+      
+      // Process new message for useful content
+      console.log("🔄 Processing assistant response for useful content");
+      processNewMessage(response);
+      
     } catch (error) {
-      console.error('Error getting response:', error);
+      console.error('🔴 Error getting response:', error);
       
       // Add error message
       setMessages(prevMessages => [
@@ -125,10 +402,55 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
     }
   };
 
+  // Custom components for markdown rendering without pin buttons
+  const markdownComponents = {
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || '');
+      const code = String(children).replace(/\n$/, '');
+      
+      return !inline && match ? (
+        <SyntaxHighlighter
+          style={vscDarkPlus}
+          language={match[1]}
+          PreTag="div"
+          {...props}
+        >
+          {code}
+        </SyntaxHighlighter>
+      ) : (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    },
+    a({ node, children, href, ...props }: any) {
+      return (
+        <a 
+          href={href} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:underline"
+          {...props}
+        >
+          {children}
+        </a>
+      );
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-4 py-2 scrollbar-custom">
-        {messages.length === 0 ? (
+        {isLoadingHistory ? (
+          <div className="flex flex-col items-center justify-center h-full text-white/60">
+            <div className="animate-pulse flex space-x-2">
+              <div className="h-3 w-3 bg-indigo-500 rounded-full"></div>
+              <div className="h-3 w-3 bg-indigo-500 rounded-full"></div>
+              <div className="h-3 w-3 bg-indigo-500 rounded-full"></div>
+            </div>
+            <p className="mt-3 text-center">Carregando histórico de mensagens...</p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-white/60 pt-16">
             <svg className="w-12 h-12 mb-4 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -151,9 +473,17 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure }) => {
                       : 'bg-gray-700/80 text-gray-100'
                   }`}
                 >
-                  <div className="prose prose-sm dark:prose-invert break-words">
-                    {message.content}
-                  </div>
+                  {message.role === 'assistant' ? (
+                    <div className="prose prose-sm dark:prose-invert break-words max-w-none">
+                      <ReactMarkdown components={markdownComponents}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="prose prose-sm dark:prose-invert break-words">
+                      {message.content}
+                    </div>
+                  )}
                   <div className={`text-xs mt-1 ${
                     message.role === 'user' ? 'text-indigo-200/70' : 'text-gray-400'
                   }`}>

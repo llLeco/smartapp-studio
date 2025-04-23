@@ -7,7 +7,7 @@ import AppLayout from '../components/AppLayout';
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
-  
+
   return (
     <WalletProvider>
       <AppLayout>

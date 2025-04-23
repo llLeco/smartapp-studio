@@ -10,6 +10,7 @@ import ActiveSessions from '../../components/ActiveSessions';
 import BottomNavBar from '../../components/BottomNavBar';
 import PageBackground from '../../components/PageBackground';
 import styles from '../../styles/Home.module.css';
+import { askAssistant } from '../../utils/apiHelpers';
 
 // Componente para criar estrelas no fundo
 const Stars = () => {
@@ -69,6 +70,17 @@ const OrbitingParticles = () => {
   return <div className="fixed inset-0 z-0 overflow-hidden">{particles}</div>;
 };
 
+// PinnedItem interface matching the one in Chat.tsx
+interface PinnedItem {
+  id: string;
+  type: 'code' | 'link';
+  content: string;
+  language?: string;
+  title: string;
+  url?: string;
+  autoDetected?: boolean;
+}
+
 export default function ProjectChatPage() {
   const router = useRouter();
   const { topicId } = router.query;
@@ -76,6 +88,7 @@ export default function ProjectChatPage() {
   const [mounted, setMounted] = useState(false);
   const { isConnected, accountId } = useWallet();
   const [projectName, setProjectName] = useState("Meu Projeto");
+  const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
 
   // Efeito para garantir que o componente é montado apenas no cliente
   useEffect(() => {
@@ -104,32 +117,19 @@ export default function ProjectChatPage() {
     }
   };
 
-  // Função para enviar mensagem
-  const handleSendMessage = async (message: string): Promise<string> => {
-    console.log(`Enviando mensagem para o topicId: ${topicId}`);
+  // Function to handle sending messages to the AI
+  const handleSendMessage = async (message: string) => {
+    if (!topicId) {
+      throw new Error('No topicId provided');
+    }
     
     try {
-      // Adaptar para incluir o topicId nas chamadas à API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          topicId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Erro ao processar a solicitação');
-      }
-
-      const data = await response.json();
-      return data.response;
+      // Use the askAssistant function to send the message to the AI
+      const response = await askAssistant(message, topicId as string);
+      return response;
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      return 'Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.';
+      console.error('Error sending message to AI:', error);
+      throw error;
     }
   };
 
@@ -182,7 +182,7 @@ export default function ProjectChatPage() {
             <div className="flex flex-1 overflow-hidden">
               {/* Sidebar - visível apenas em telas maiores */}
               <div className="hidden md:block w-72 border-r border-white/10 bg-black/20">
-                <Sidebar generatedStructure={generatedStructure} />
+                <Sidebar generatedStructure={generatedStructure} pinnedItems={pinnedItems} />
               </div>
 
               {/* Área de chat */}
@@ -190,6 +190,7 @@ export default function ProjectChatPage() {
                 <Chat 
                   onSendMessage={handleSendMessage}
                   generatedStructure={generatedStructure}
+                  setPinnedItems={setPinnedItems}
                 />
               </div>
             </div>
