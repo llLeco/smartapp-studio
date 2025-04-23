@@ -43,6 +43,71 @@ interface LicenseStatusProps {
   checking: boolean;
 }
 
+// TransactionStep component to show progress
+interface TransactionStepProps {
+  step: string;
+  title: string;
+  description: string;
+  status: 'waiting' | 'current' | 'completed' | 'error';
+  errorMessage?: string;
+}
+
+const TransactionStep: React.FC<TransactionStepProps> = ({ 
+  step, 
+  title, 
+  description, 
+  status,
+  errorMessage
+}) => {
+  return (
+    <div className="flex items-start mb-4">
+      <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full mr-3">
+        {status === 'waiting' && (
+          <div className="w-8 h-8 rounded-full border-2 border-gray-300 dark:border-gray-700 flex items-center justify-center">
+            <span className="text-sm text-gray-500 dark:text-gray-400">{step}</span>
+          </div>
+        )}
+        {status === 'current' && (
+          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 border-2 border-blue-500 dark:border-blue-600 flex items-center justify-center">
+            <svg className="animate-spin h-4 w-4 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        )}
+        {status === 'completed' && (
+          <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900 border-2 border-green-500 dark:border-green-600 flex items-center justify-center">
+            <svg className="h-4 w-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </div>
+        )}
+        {status === 'error' && (
+          <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900 border-2 border-red-500 dark:border-red-600 flex items-center justify-center">
+            <svg className="h-4 w-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </div>
+        )}
+      </div>
+      <div className="flex-1">
+        <h4 className={`font-medium ${
+          status === 'completed' ? 'text-green-600 dark:text-green-400' : 
+          status === 'current' ? 'text-blue-600 dark:text-blue-400' :
+          status === 'error' ? 'text-red-600 dark:text-red-400' :
+          'text-gray-700 dark:text-gray-300'
+        }`}>
+          {title}
+        </h4>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{description}</p>
+        {status === 'error' && errorMessage && (
+          <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errorMessage}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Componentes internos
 const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageInfo }) => {
   if (!licenseInfo) {
@@ -173,6 +238,45 @@ const GetAccess: React.FC = () => {
   const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null);
   const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
   const [error, setError] = useState<string>('');
+  
+  // State for multi-step license creation
+  const [showSteps, setShowSteps] = useState<boolean>(false);
+  const [licenseState, setLicenseState] = useState<licenseService.LicenseCreationState | null>(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+
+  // Define steps
+  const steps = [
+    { 
+      key: 'createTopic', 
+      title: 'Criar Tópico', 
+      description: 'Criando um tópico para a licença no Hedera Consensus Service',
+      action: licenseService.createLicenseTopic 
+    },
+    { 
+      key: 'mintToken', 
+      title: 'Criar NFT', 
+      description: 'Gerando o NFT da licença com os metadados',
+      action: licenseService.mintLicenseToken 
+    },
+    { 
+      key: 'associateToken', 
+      title: 'Associar Token', 
+      description: 'Associando a licença NFT à sua conta',
+      action: licenseService.associateLicenseToken 
+    },
+    { 
+      key: 'recordMessage', 
+      title: 'Registrar Licença', 
+      description: 'Registrando informações da licença no tópico',
+      action: licenseService.recordLicenseMessage 
+    },
+    { 
+      key: 'transferToken', 
+      title: 'Transferir NFT', 
+      description: 'Transferindo a licença NFT para sua conta com pagamento',
+      action: licenseService.transferLicenseWithSubscription 
+    }
+  ];
 
   useEffect(() => {
     const checkLicense = async () => {
@@ -201,7 +305,6 @@ const GetAccess: React.FC = () => {
         }
       } catch (err) {
         console.error('Erro ao verificar licença:', err);
-        setError('Não foi possível verificar sua licença. Tente novamente.');
       } finally {
         setChecking(false);
       }
@@ -209,6 +312,119 @@ const GetAccess: React.FC = () => {
 
     checkLicense();
   }, [isConnected, accountId, router]);
+
+  const handleStartLicenseProcess = async () => {
+    if (!isConnected) {
+      await connect();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+      
+      const metadata: NftMetadata = {
+        name: "SmartApp Studio License",
+        description: "Esta NFT concede acesso ao SmartApp Studio",
+        type: "LICENSE",
+        additionalProperties: {
+          initialLimit: 100,
+          createdAt: new Date().toISOString()
+        }
+      };
+      
+      const initialState = await licenseService.initLicenseCreation(metadata);
+      setLicenseState(initialState);
+      setShowSteps(true);
+      setCurrentStepIndex(0);
+      
+    } catch (err: any) {
+      console.error('Erro ao iniciar processo de licença:', err);
+      setError(err.message || 'Erro ao iniciar o processo de licença');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNextStep = async () => {
+    if (!licenseState) return;
+    
+    try {
+      setLoading(true);
+      
+      const step = steps[currentStepIndex];
+      console.log(`Executando passo: ${step.key}`);
+      
+      const updatedState = await step.action(licenseState);
+      setLicenseState(updatedState);
+      
+      if (updatedState.error) {
+        setError(updatedState.error);
+        return;
+      }
+      
+      // Move to next step
+      if (currentStepIndex < steps.length - 1) {
+        setCurrentStepIndex(currentStepIndex + 1);
+      } else {
+        // Process complete
+        if (updatedState.step === 'complete') {
+          // Convert to license info format for display
+          const newLicenseInfo: LicenseInfo = {
+            tokenId: updatedState.tokenId!,
+            serialNumber: updatedState.serialNumber!,
+            topicId: updatedState.topicId!,
+            metadata: updatedState.metadata!,
+            ownerId: updatedState.accountId!
+          };
+          
+          setLicenseInfo(newLicenseInfo);
+          setShowSteps(false);
+          
+          // Redirect to app
+          setTimeout(() => {
+            router.push('/app');
+          }, 1500);
+        }
+      }
+    } catch (err: any) {
+      console.error('Erro ao processar passo:', err);
+      setError(err.message || 'Erro ao processar passo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    // Reset all states to start from zero
+    setError('');
+    setLicenseState(null);
+    setCurrentStepIndex(0);
+    setShowSteps(false);
+    
+    // Restart the process
+    handleStartLicenseProcess();
+  };
+
+  const getStepStatus = (stepIndex: number): 'waiting' | 'current' | 'completed' | 'error' => {
+    if (!licenseState) return 'waiting';
+    
+    const stepKey = steps[stepIndex].key;
+    
+    if (licenseState.error && stepKey === licenseState.step) {
+      return 'error';
+    }
+    
+    if (stepIndex === currentStepIndex) {
+      return 'current';
+    }
+    
+    if (stepIndex < currentStepIndex) {
+      return 'completed';
+    }
+    
+    return 'waiting';
+  };
 
   const handleCreateLicense = async () => {
     if (!isConnected) {
@@ -305,21 +521,44 @@ const GetAccess: React.FC = () => {
                 </p>
               </div>
               
-              <div className="mb-6">
-                <LicenseStatus isValid={!!licenseInfo} checking={checking} />
-              </div>
+              {!showSteps && (
+                <>
+                  <div className="mb-6">
+                    <LicenseStatus isValid={!!licenseInfo} checking={checking} />
+                  </div>
+                  
+                  <div className="mb-6">
+                    <AccessCard 
+                      licenseInfo={licenseInfo}
+                      accountId={accountId}
+                      usageInfo={usageInfo}
+                    />
+                  </div>
+                </>
+              )}
               
-              <div className="mb-6">
-                <AccessCard 
-                  licenseInfo={licenseInfo}
-                  accountId={accountId}
-                  usageInfo={usageInfo}
-                />
-              </div>
+              {showSteps && (
+                <div className="mb-6 p-4 bg-white/80 dark:bg-gray-800/80 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-4">Criando sua licença</h3>
+                  
+                  <div className="space-y-5">
+                    {steps.map((step, index) => (
+                      <TransactionStep
+                        key={step.key}
+                        step={`${index + 1}`}
+                        title={step.title}
+                        description={step.description}
+                        status={getStepStatus(index)}
+                        errorMessage={licenseState?.error && licenseState.step === step.key ? licenseState.error : undefined}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               
-              {error && (
+              {error && showSteps && (
                 <div className="mb-6 p-3 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 text-sm rounded-lg">
-                  {error}
+                  <p>{error}</p>
                 </div>
               )}
               
@@ -336,8 +575,55 @@ const GetAccess: React.FC = () => {
                     </svg>
                     Conectar Carteira
                   </button>
+                ) : showSteps ? (
+                  <div className="flex space-x-3">
+                    {licenseState?.error && (
+                      <button
+                        onClick={handleRetry}
+                        className="flex-1 flex justify-center items-center py-3 px-4 border border-red-300 dark:border-red-700 text-md font-medium rounded-xl text-red-700 dark:text-red-300 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow transition-all duration-300"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Reiniciar
+                      </button>
+                    )}
+                    <button
+                      onClick={handleNextStep}
+                      disabled={loading}
+                      className={`${licenseState?.error ? 'flex-1' : 'w-full'} flex justify-center py-3 px-4 border border-transparent text-lg font-medium rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-lg transition-all duration-300`}
+                    >
+                      {loading ? (
+                        <span className="flex items-center">
+                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Processando...
+                        </span>
+                      ) : (
+                        <span>{licenseState?.error ? 'Tentar novamente' : 'Próximo'}</span>
+                      )}
+                    </button>
+                  </div>
                 ) : !licenseInfo ? (
-                  <BuyLicenseButton onClick={handleCreateLicense} loading={loading} />
+                  <button
+                    onClick={handleStartLicenseProcess}
+                    disabled={loading}
+                    className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-lg font-medium rounded-xl text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+                  >
+                    {loading ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processando...
+                      </span>
+                    ) : (
+                      <span>Adquirir Acesso</span>
+                    )}
+                  </button>
                 ) : (
                   <button
                     onClick={() => router.push('/app')}
