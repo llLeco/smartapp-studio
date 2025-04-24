@@ -15,7 +15,8 @@ import {
   TokenSupplyType,
   TokenAssociateTransaction,
   TopicMessageSubmitTransaction,
-  Transaction
+  Transaction,
+  TransactionId
 } from "@hashgraph/sdk";
 
 export interface NftMetadata {
@@ -493,7 +494,7 @@ export const getOperatorId = (): string | null => {
  */
 export const executeSignedTransaction = async (
   signedTransactionBytes: Uint8Array
-): Promise<string> => {
+): Promise<{ status: string; transactionId: string }> => {
   try {
     const client = getClient();
     
@@ -504,7 +505,15 @@ export const executeSignedTransaction = async (
     const txResponse = await transaction.execute(client);
     const receipt = await txResponse.getReceipt(client);
     
-    return receipt.status.toString();
+    // Get the transaction ID as string, falling back to a timestamp if not available
+    const transactionId = transaction.transactionId 
+      ? transaction.transactionId.toString() 
+      : `transaction-${new Date().toISOString()}`;
+    
+    return {
+      status: receipt.status.toString(),
+      transactionId
+    };
   } catch (error) {
     console.error('Error executing signed transaction:', error);
     throw error;
@@ -526,7 +535,7 @@ export const getLicenseTokenId = (): string | null => {
 /**
  * Creates a new topic for a project
  */
-export const createProjectTopic = async (projectName: string, ownerAccountId?: string): Promise<string> => {
+export const createProjectTopic = async (projectName: string, ownerAccountId?: string, chatCount: number = 3): Promise<string> => {
   try {
     const client = getClient();
     
@@ -551,14 +560,20 @@ export const createProjectTopic = async (projectName: string, ownerAccountId?: s
     const receipt = await txResponse.getReceipt(client);
     const topicId = receipt.topicId!.toString();
     
-    console.log(`Created new project topic ${topicId} for ${projectName}`);
+    console.log(`Created new project topic ${topicId} for ${projectName} with ${chatCount} chat messages`);
     
-    // Submit initial message to the topic
+    // Submit initial message to the topic with message allowance information
     const messageContent = {
       type: 'PROJECT_CREATION',
       name: projectName,
       createdAt: new Date().toISOString(),
       owner: ownerAccountId || client.operatorAccountId!.toString(),
+      chatCount: chatCount,
+      messageAllowance: {
+        total: chatCount,
+        used: 0,
+        remaining: chatCount
+      }
     };
     
     const message = new TopicMessageSubmitTransaction()
@@ -582,7 +597,8 @@ export const recordProjectToLicense = async (
   projectTopicId: string,
   accountId: string,
   projectName: string,
-  timestamp: string
+  timestamp: string,
+  chatCount?: number
 ): Promise<string> => {
   try {
     const client = getClient();
@@ -593,6 +609,7 @@ export const recordProjectToLicense = async (
       projectTopicId,
       projectName,
       ownerAccountId: accountId,
+      chatCount: chatCount || 3, // Usar chatCount se fornecido, ou 3 como padrão
       createdAt: timestamp || new Date().toISOString()
     };
     
@@ -604,7 +621,7 @@ export const recordProjectToLicense = async (
     const response = await transaction.execute(client);
     const receipt = await response.getReceipt(client);
     
-    console.log(`Recorded project ${projectTopicId} in license ${licenseTopicId}`);
+    console.log(`Recorded project ${projectTopicId} in license ${licenseTopicId} with ${chatCount || 3} chats`);
     
     // Return the transaction ID as a record of the message
     return response.transactionId.toString();

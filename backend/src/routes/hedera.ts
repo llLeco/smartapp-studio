@@ -18,6 +18,11 @@ import {
   createProjectTopic,
   recordProjectToLicense
 } from '../services/hederaService';
+import {
+  getMessagesAllowance,
+  addMessagesToProject,
+  updateMessagesUsage
+} from '../services/aiService';
 
 const router = express.Router();
 
@@ -256,13 +261,13 @@ router.get('/getOperatorId', async (req: Request, res: Response) => {
 // POST /api/hedera/createProjectTopic
 router.post('/createProjectTopic', async (req: Request, res: Response) => {
   try {
-    const { projectName, ownerAccountId } = req.body;
+    const { projectName, ownerAccountId, chatCount } = req.body;
     
     if (!projectName) {
       return res.status(400).json({ success: false, error: 'Project name is required' });
     }
     
-    const projectTopic = await createProjectTopic(projectName, ownerAccountId);
+    const projectTopic = await createProjectTopic(projectName, ownerAccountId, chatCount);
     
     res.json({ success: true, data: projectTopic });
   } catch (err) {
@@ -274,7 +279,7 @@ router.post('/createProjectTopic', async (req: Request, res: Response) => {
 // POST /api/hedera/recordProjectMessage
 router.post('/recordProjectMessage', async (req: Request, res: Response) => {
   try {
-    const { licenseTopic, projectTopicId, accountId, projectName, timestamp } = req.body;
+    const { licenseTopic, projectTopicId, accountId, projectName, timestamp, chatCount } = req.body;
     
     if (!licenseTopic || !projectTopicId || !accountId) {
       return res.status(400).json({ 
@@ -288,13 +293,125 @@ router.post('/recordProjectMessage', async (req: Request, res: Response) => {
       projectTopicId, 
       accountId, 
       projectName,
-      timestamp
+      timestamp,
+      chatCount
     );
     
     res.json({ success: true, data: messageId });
   } catch (err) {
     console.error('recordProjectMessage error', err);
     res.status(500).json({ success: false, error: 'Failed to record project message' });
+  }
+});
+
+// POST /api/hedera/processProjectPayment
+router.post('/processProjectPayment', async (req: Request, res: Response) => {
+  try {
+    const { signedTransactionBytes } = req.body;
+    
+    if (!signedTransactionBytes) {
+      return res.status(400).json({
+        success: false,
+        error: 'Signed transaction bytes are required'
+      });
+    }
+    
+    // Convert from base64 back to bytes
+    const signedTransaction = Buffer.from(signedTransactionBytes, 'base64');
+    
+    // Execute the signed transaction
+    const result = await executeSignedTransaction(signedTransaction);
+    
+    return res.json({
+      success: true,
+      data: {
+        status: result.status,
+        transactionId: result.transactionId
+      }
+    });
+  } catch (err: any) {
+    console.error('Error processing project payment:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Internal server error'
+    });
+  }
+});
+
+// GET /api/hedera/message-allowance
+router.get('/message-allowance', async (req: Request, res: Response) => {
+  try {
+    const topicId = req.query.topicId as string;
+    
+    if (!topicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Topic ID is required'
+      });
+    }
+    
+    const allowanceData = await getMessagesAllowance(topicId);
+    
+    return res.json({
+      success: allowanceData.success,
+      remainingMessages: allowanceData.remainingMessages,
+      totalAllowance: allowanceData.totalAllowance,
+      messagesUsed: allowanceData.messagesUsed,
+      error: allowanceData.error
+    });
+  } catch (err: any) {
+    console.error('Error checking message allowance:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to check message allowance'
+    });
+  }
+});
+
+// POST /api/hedera/add-messages
+router.post('/add-messages', async (req: Request, res: Response) => {
+  try {
+    const { topicId, messageCount, paymentTransactionId } = req.body;
+    
+    if (!topicId || !messageCount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Topic ID and message count are required'
+      });
+    }
+    
+    if (messageCount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message count must be greater than zero'
+      });
+    }
+    
+    // Verificar se o ID de transação foi fornecido
+    if (!paymentTransactionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment transaction ID is required'
+      });
+    }
+    
+    // Aqui poderia ser adicionada uma verificação adicional da transação
+    // Consultando a Mirror Node ou outro método para garantir que a transação é válida
+    // e que o pagamento foi realmente feito
+    
+    const result = await addMessagesToProject(topicId, messageCount, paymentTransactionId);
+    
+    return res.json({
+      success: result.success,
+      newTotal: result.newTotal,
+      error: result.error
+    });
+  } catch (err: any) {
+    console.error('Error adding messages to project:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to add messages to project'
+    });
   }
 });
 

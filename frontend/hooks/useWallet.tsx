@@ -1,6 +1,7 @@
 // frontend/hooks/useWallet.ts
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { DAppConnector } from '@hashgraph/hedera-wallet-connect';
+import { Transaction } from '@hashgraph/sdk';
 import getDAppConnector, { resetDAppConnector } from '../lib/walletConnect';
 
 interface WalletContextType {
@@ -11,6 +12,7 @@ interface WalletContextType {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   disconnectSession: (topic: string) => Promise<boolean>;
+  signTransaction: (transaction: Transaction) => Promise<Transaction>;
   activeSessions: Array<{
     topic: string;
     accountId: string;
@@ -26,6 +28,7 @@ const WalletContext = createContext<WalletContextType>({
   connect: async () => {},
   disconnect: async () => {},
   disconnectSession: async () => false,
+  signTransaction: async () => { throw new Error('Not implemented'); },
   activeSessions: []
 });
 
@@ -91,6 +94,28 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       console.error('Erro ao conectar:', err);
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const signTransaction = async (transaction: Transaction): Promise<Transaction> => {
+    if (!connector || connector.signers.length === 0) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      // Get the first signer
+      const signer = connector.signers[0];
+      
+      // Use the signer to sign the transaction
+      if (typeof signer.signTransaction === 'function') {
+        const signedTx = await signer.signTransaction(transaction);
+        return signedTx;
+      } else {
+        throw new Error('Wallet does not support transaction signing');
+      }
+    } catch (err: any) {
+      console.error('Error signing transaction:', err);
+      throw new Error(err.message || 'Failed to sign transaction');
     }
   };
 
@@ -170,6 +195,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       connect, 
       disconnect,
       disconnectSession,
+      signTransaction,
       activeSessions
     }}>
       {children}

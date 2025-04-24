@@ -58,7 +58,7 @@ function api(path: string) {
   return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
 }
 
-// Mirror Node URL based on network
+// Mirror Node URL
 const MIRROR_NODE_URL = 
   process.env.NEXT_PUBLIC_MIRROR_NODE_URL || 
   "https://testnet.mirrornode.hedera.com";
@@ -359,72 +359,67 @@ export async function checkLicenseValidity(accountId: string) {
 }
 
 // --- Project Management ---
-export async function createNewProject(
-  licenseTopic: string, 
+export const createNewProject = async (
+  licenseTopicId: string,
   accountId: string,
-  projectName: string
-): Promise<{ success: boolean; projectTopicId: string; error?: string }> {
+  projectName: string,
+  chatCount: number = 3
+): Promise<{ success: boolean; projectTopicId?: string; error?: string }> => {
   try {
-    // Create a new topic for the project via backend
-    const createRes = await fetch(api("/api/hedera/createProjectTopic"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
+    // Primeiro, crie o tópico do projeto
+    const createResponse = await fetch(api('/api/hedera/createProjectTopic'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         projectName,
-        ownerAccountId: accountId
+        ownerAccountId: accountId,
+        chatCount
       }),
     });
+
+    const topicResult = await createResponse.json();
     
-    if (!createRes.ok) {
-      const errorData = await createRes.json();
-      throw new Error(errorData.error || 'Failed to create project topic');
+    if (!topicResult.success || !topicResult.data) {
+      throw new Error(topicResult.error || 'Failed to create project topic');
     }
     
-    const { success, data: projectTopicId, error } = await createRes.json();
+    const projectTopicId = topicResult.data;
     
-    if (!success || !projectTopicId) {
-      throw new Error(error || 'Failed to create project topic');
-    }
-    
-    console.log(`Project topic created: ${projectTopicId}`);
-    
-    // Link the project to the license by recording a message in the license topic
-    const linkRes = await fetch(api("/api/hedera/recordProjectMessage"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    // Em seguida, registre o projeto no tópico da licença
+    const recordResponse = await fetch(api('/api/hedera/recordProjectMessage'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
-        licenseTopic,
+        licenseTopic: licenseTopicId,
         projectTopicId,
         accountId,
         projectName,
+        chatCount,
         timestamp: new Date().toISOString()
       }),
     });
     
-    if (!linkRes.ok) {
-      const errorData = await linkRes.json();
-      throw new Error(errorData.error || 'Failed to record project in license');
+    const recordResult = await recordResponse.json();
+    
+    if (!recordResult.success) {
+      throw new Error(recordResult.error || 'Failed to record project message');
     }
     
-    const linkData = await linkRes.json();
+    console.log(`Project created with ${chatCount} chat messages`);
     
-    if (!linkData.success) {
-      throw new Error(linkData.error || 'Failed to record project in license');
-    }
-    
-    return {
-      success: true,
+    return { 
+      success: true, 
       projectTopicId
     };
   } catch (error: any) {
     console.error('Error creating new project:', error);
-    return {
-      success: false,
-      projectTopicId: '',
-      error: error.message || 'Failed to create new project'
-    };
+    return { success: false, error: error.message || 'Error creating new project' };
   }
-}
+};
 
 // --- Project Retrieval ---
 export interface Project {
@@ -467,5 +462,131 @@ export async function getUserProjects(licenseTopic: string): Promise<Project[]> 
   } catch (error: any) {
     console.error('Error fetching user projects:', error);
     return [];
+  }
+}
+
+/**
+ * Creates a token transfer transaction for paying for a project
+ * 
+ * @param tokenId - The token ID to transfer
+ * @param amount - The amount of tokens to transfer
+ * @param senderAccountId - The account ID of the sender
+ * @param receiverAccountId - The account ID of the receiver
+ * @returns The transaction ready to be signed
+ */
+export async function createPaymentTransaction(
+  tokenId: string,
+  amount: number,
+  senderAccountId: string,
+  receiverAccountId: string
+): Promise<Transaction> {
+  try {
+    // Log transaction details
+    console.log(`Creating payment transaction with tokenId: ${tokenId}, amount: ${amount}, sender: ${senderAccountId}, receiver: ${receiverAccountId}`);
+
+    // Create a client for transaction preparation
+    const client = getClient();
+    
+    // Create a transfer transaction
+    const transaction = new TransferTransaction()
+      .addTokenTransfer(
+        TokenId.fromString(tokenId),
+        AccountId.fromString(senderAccountId),
+        -amount
+      )
+      .addTokenTransfer(
+        TokenId.fromString(tokenId),
+        AccountId.fromString(receiverAccountId),
+        amount
+      )
+      .setTransactionId(TransactionId.generate(AccountId.fromString(senderAccountId)))
+      .setNodeAccountIds([new AccountId(3)]) // Use node 0.0.3 for testnet
+      .freezeWith(client);
+    
+    return transaction;
+  } catch (error: any) {
+    console.error('Error creating payment transaction:', error);
+    throw new Error('Failed to create payment transaction: ' + error.message);
+  }
+}
+
+/**
+ * Creates a token transfer transaction for paying for additional messages
+ * 
+ * @param tokenId - The token ID to transfer
+ * @param messageCount - Number of messages to purchase
+ * @param senderAccountId - The account ID of the sender
+ * @param receiverAccountId - The account ID of the receiver
+ * @returns The transaction ready to be signed
+ */
+export async function createMessagePaymentTransaction(
+  tokenId: string,
+  messageCount: number,
+  senderAccountId: string,
+  receiverAccountId: string
+): Promise<Transaction> {
+  try {
+    // Set price per message from environment variables
+    const pricePerMessage = parseInt(process.env.NEXT_PUBLIC_MESSAGE_PRICE || "1000", 10);
+    const amount = messageCount * pricePerMessage;
+    
+    // Buscar detalhes do token para ajustar a escala dos decimais
+    const tokenDetails = await getTokenDetails(tokenId);
+    const multiplier = Math.pow(10, tokenDetails.decimals);
+    const adjustedAmount = amount * multiplier;
+    
+    // Log transaction details
+    console.log(`Creating message payment transaction: ${messageCount} messages at ${pricePerMessage} tokens each = ${amount} tokens (${adjustedAmount} adjusted for decimals)`);
+
+    // Create a client for transaction preparation
+    const client = getClient();
+    
+    // Create a transfer transaction
+    const transaction = new TransferTransaction()
+      .addTokenTransfer(
+        TokenId.fromString(tokenId),
+        AccountId.fromString(senderAccountId),
+        -adjustedAmount
+      )
+      .addTokenTransfer(
+        TokenId.fromString(tokenId),
+        AccountId.fromString(receiverAccountId),
+        adjustedAmount
+      )
+      .setTransactionId(TransactionId.generate(AccountId.fromString(senderAccountId)))
+      .setNodeAccountIds([new AccountId(3)]) // Use node 0.0.3 for testnet
+      .freezeWith(client);
+    
+    return transaction;
+  } catch (error: any) {
+    console.error('Error creating message payment transaction:', error);
+    throw new Error('Failed to create message payment transaction: ' + error.message);
+  }
+}
+
+/**
+ * Fetch token details from mirror node to get decimals
+ */
+export async function getTokenDetails(tokenId: string): Promise<{ decimals: number }> {
+  try {
+    const url = `${MIRROR_NODE_URL}/api/v1/tokens/${tokenId}`;
+    console.log(`Fetching token details from: ${url}`);
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Mirror node error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Token details:', data);
+    
+    // Return the decimals value
+    return {
+      decimals: data.decimals || 0
+    };
+  } catch (error) {
+    console.error('Error fetching token details:', error);
+    throw error;
   }
 }

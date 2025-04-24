@@ -3,7 +3,12 @@ import { useRouter } from 'next/router';
 import { useWallet } from '../../hooks/useWallet';
 import Head from 'next/head';
 import LicenseInfoComponent from '../../components/LicenseInfo';
-import { checkLicenseValidity, createNewProject, getUserProjects, Project } from '../../services/licenseService';
+import ProjectPaymentModal from '../../components/ProjectPaymentModal';
+import { checkLicenseValidity, createNewProject, getUserProjects, Project, getTokenDetails } from '../../services/licenseService';
+
+// Configurar URL base do backend
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
 
 const AppPage = () => {
   const router = useRouter();
@@ -14,6 +19,13 @@ const AppPage = () => {
   const [licenseInfo, setLicenseInfo] = useState<any>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  
+  // Estado para os modais
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentData, setPaymentData] = useState<{
+    tokenId: string;
+    receiverAccountId: string;
+  }>({ tokenId: '', receiverAccountId: '' });
 
   useEffect(() => {
     // Redirecionar para a página de acesso se não estiver conectado
@@ -75,40 +87,62 @@ const AppPage = () => {
       setProjectError('Conta ou licença não disponível. Verifique sua conexão.');
       return;
     }
-
+    
     try {
-      setProjectLoading(true);
-      setProjectError(null);
-      console.log('Creating new project...');
+      // Usar o token ID do Hsuite a partir do .env
+      const hsuiteTokenId = process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022';
       
-      // Get project name - could use a modal in a real app
-      const projectName = prompt('Digite o nome do seu novo projeto:') || 'Novo Projeto';
+      // Obter operator ID para a transação
+      const operatorRes = await fetch(api('/api/hedera/getOperatorId'));
+      const operatorData = await operatorRes.json();
       
-      if (!projectName.trim()) {
-        setProjectError('Nome do projeto não pode ser vazio');
-        setProjectLoading(false);
-        return;
+      if (!operatorData.success || !operatorData.data) {
+        throw new Error('Operator ID não disponível');
       }
       
+      // Configurar os dados necessários para o pagamento
+      setPaymentData({
+        tokenId: hsuiteTokenId,
+        receiverAccountId: operatorData.data
+      });
+      
+      // Mostrar o modal integrado de criação/pagamento
+      setShowPaymentModal(true);
+      
+    } catch (err: any) {
+      console.error('Error preparing project:', err);
+      setProjectError(err.message || 'Erro ao preparar projeto');
+    }
+  };
+  
+  const handlePaymentConfirm = async (transactionId: string, projectName: string, chatCount: number) => {
+    try {
+      setProjectLoading(true);
+      setShowPaymentModal(false);
+      
+      // Agora que o pagamento foi realizado, criar o projeto
       const result = await createNewProject(
         licenseInfo.topicId,
-        accountId,
-        projectName
+        accountId!,
+        projectName,
+        chatCount
       );
       
       if (result.success) {
         console.log('Project created successfully', result);
-        alert(`Projeto "${projectName}" criado com sucesso!\nTopic ID: ${result.projectTopicId}`);
+        alert(`Projeto "${projectName}" criado com sucesso!\nTopic ID: ${result.projectTopicId}\nMensagens disponíveis: ${chatCount}`);
         
         // Add the new project to the list
-        const newProject: Project = {
-          projectTopicId: result.projectTopicId,
-          projectName,
-          createdAt: new Date().toISOString(),
-          ownerAccountId: accountId
-        };
-        
-        setProjects(prev => [...prev, newProject]);
+        if (result.projectTopicId) {
+          const newProject: Project = {
+            projectTopicId: result.projectTopicId,
+            projectName: projectName,
+            createdAt: new Date().toISOString(),
+            ownerAccountId: accountId!
+          };
+          
+          setProjects(prev => [...prev, newProject]);
+        }
       } else {
         setProjectError(result.error || 'Erro ao criar projeto');
       }
@@ -183,58 +217,72 @@ const AppPage = () => {
                           </>
                         ) : (
                           <>
-                            <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="-ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
-                            Novo Projeto
+                            Criar Novo Projeto
                           </>
                         )}
                       </button>
                     </div>
-                    
-                    {loadingProjects ? (
-                      <div className="flex justify-center py-8">
-                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                  </div>
+                  
+                  {/* Lista de projetos */}
+                  {loadingProjects ? (
+                    <div className="py-6 flex justify-center">
+                      <div className="animate-pulse flex space-x-2">
+                        <div className="h-3 w-3 bg-blue-400 rounded-full"></div>
+                        <div className="h-3 w-3 bg-blue-400 rounded-full"></div>
+                        <div className="h-3 w-3 bg-blue-400 rounded-full"></div>
                       </div>
-                    ) : projects.length === 0 ? (
-                      <div className="text-center p-8 bg-gray-800/50 rounded-lg border border-gray-700">
-                        <p className="text-gray-400">Você ainda não possui projetos</p>
-                        <p className="mt-2 text-sm text-gray-500">
-                          Clique em "Novo Projeto" para começar
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                        {projects.map(project => (
-                          <div 
-                            key={project.projectTopicId}
-                            className="bg-black/40 p-6 rounded-lg border border-gray-700 shadow-sm hover:shadow-md transition-shadow duration-200"
-                          >
-                            <h4 className="text-lg font-medium text-gray-200 mb-2">{project.projectName}</h4>
-                            <p className="text-sm text-gray-400 mb-4">
-                              Criado em: {new Date(project.createdAt).toLocaleDateString()}
-                            </p>
-                            <div className="flex justify-between items-center mt-4">
-                              <span className="text-xs text-gray-500 font-mono truncate">
-                                {project.projectTopicId}
-                              </span>
-                              <button
-                                onClick={() => openProject(project.projectTopicId, project.projectName)}
-                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-blue-300 bg-blue-900/40 hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                              >
-                                Abrir
-                              </button>
+                    </div>
+                  ) : projects.length === 0 ? (
+                    <div className="text-center py-12">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                      </svg>
+                      <h3 className="mt-2 text-sm font-medium text-gray-300">Nenhum projeto</h3>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Comece criando um novo projeto.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {projects.map((project) => (
+                        <div
+                          key={project.projectTopicId}
+                          className="relative rounded-lg border border-white/10 bg-white/5 p-4 cursor-pointer hover:bg-white/10 transition"
+                          onClick={() => openProject(project.projectTopicId, project.projectName)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-white truncate">
+                              {project.projectName}
+                            </h3>
+                            <div className="text-xs text-gray-400 whitespace-nowrap">
+                              {new Date(project.createdAt).toLocaleDateString()}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                          <p className="mt-1 text-xs text-gray-400 font-mono overflow-hidden text-ellipsis">
+                            {project.projectTopicId}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
         </main>
+        
+        {/* Modais */}
+        <ProjectPaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onConfirm={handlePaymentConfirm}
+          tokenId={paymentData.tokenId}
+          receiverAccountId={paymentData.receiverAccountId}
+        />
       </div>
     </>
   );

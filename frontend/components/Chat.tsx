@@ -3,6 +3,12 @@ import { useRouter } from 'next/router';
 import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import MessagePaymentModal from './MessagePaymentModal';
+import { useWallet } from '../hooks/useWallet';
+
+// Configurar URL base do backend se necessário
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
 
 interface Message {
   id: string;
@@ -31,6 +37,13 @@ interface PinnedItem {
   importance?: number; // Higher value means more important
 }
 
+// Interface para informações de cota de mensagens
+interface MessageAllowance {
+  remainingMessages: number;
+  totalAllowance: number;
+  messagesUsed: number;
+}
+
 export interface ChatProps {
   onSendMessage: (message: string) => Promise<string>;
   generatedStructure: string | null;
@@ -42,17 +55,75 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [messageAllowance, setMessageAllowance] = useState<MessageAllowance | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { topicId } = router.query;
   const [localPinnedItems, setLocalPinnedItems] = useState<PinnedItem[]>([]);
+  const { accountId } = useWallet();
+  // Token ID from environment variable
+  const [tokenId] = useState(process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022');
+  // Estado para armazenar o receiver account ID que virá da API
+  const [receiverAccountId, setReceiverAccountId] = useState<string | null>(null);
+
+  // Buscar o operator ID quando o componente montar
+  useEffect(() => {
+    const fetchOperatorId = async () => {
+      try {
+        const operatorRes = await fetch(api('/api/hedera/getOperatorId'));
+        const operatorData = await operatorRes.json();
+        
+        if (operatorData.success && operatorData.data) {
+          setReceiverAccountId(operatorData.data);
+          console.log('Operator ID obtido: ', operatorData.data);
+        } else {
+          console.error('Falha ao obter Operator ID');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar Operator ID:', error);
+      }
+    };
+    
+    fetchOperatorId();
+  }, []);
 
   useEffect(() => {
     // Carregar mensagens se houver um topicId
     if (topicId) {
       loadMessagesFromTopic(topicId as string);
+      // Também carregar informações de cota de mensagens
+      fetchMessageAllowance(topicId as string);
     }
   }, [topicId]);
+
+  // Função para buscar informações de cota de mensagens
+  const fetchMessageAllowance = async (id: string) => {
+    try {
+      // Usar o endpoint do Next.js que faz proxy para o backend
+      const response = await fetch(`/api/message-allowance?topicId=${id}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch message allowance: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setMessageAllowance({
+          remainingMessages: data.remainingMessages,
+          totalAllowance: data.totalAllowance,
+          messagesUsed: data.messagesUsed
+        });
+        
+        console.log(`Message allowance: ${data.remainingMessages}/${data.totalAllowance}`);
+      } else {
+        console.error('Error fetching message allowance:', data.error);
+      }
+    } catch (error) {
+      console.error('Error fetching message allowance:', error);
+    }
+  };
 
   // Process all existing messages to extract useful content when messages change
   useEffect(() => {
@@ -331,6 +402,21 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const handleSendMessage = async () => {
     if (input.trim() === '') return;
     
+    // Verificar se ainda há mensagens disponíveis
+    if (messageAllowance && messageAllowance.remainingMessages <= 0) {
+      // Adicionar mensagem de erro ao chat
+      setMessages(prevMessages => [
+        ...prevMessages,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: 'Você atingiu o limite de mensagens disponíveis para este projeto. Por favor, adquira mais mensagens para continuar.',
+          timestamp: new Date()
+        }
+      ]);
+      return;
+    }
+    
     // Create a new user message
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -376,6 +462,24 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       // Process new message for useful content
       console.log("🔄 Processing assistant response for useful content");
       processNewMessage(response);
+      
+      // Atualizar contagem de mensagens após envio bem-sucedido
+      if (messageAllowance) {
+        setMessageAllowance({
+          ...messageAllowance,
+          remainingMessages: Math.max(0, messageAllowance.remainingMessages - 1),
+          messagesUsed: messageAllowance.messagesUsed + 1
+        });
+      }
+      
+      // Após enviar uma mensagem com sucesso, atualizar as informações de cota
+      if (topicId) {
+        // Adicionar um pequeno atraso antes de buscar a cota atualizada
+        // para garantir que a atualização local seja exibida primeiro
+        setTimeout(() => {
+          fetchMessageAllowance(topicId as string);
+        }, 1000);
+      }
       
     } catch (error) {
       console.error('🔴 Error getting response:', error);
@@ -435,6 +539,56 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
           {children}
         </a>
       );
+    }
+  };
+
+  // Função para processar o pagamento e adicionar mensagens
+  const handlePaymentConfirm = async (transactionId: string, messageCount: number) => {
+    if (!topicId) {
+      alert('Não foi possível identificar o projeto');
+      setShowPaymentModal(false);
+      return;
+    }
+    
+    try {
+      // Fechar o modal de pagamento
+      setShowPaymentModal(false);
+      
+      // Chamar a API Next.js que irá encaminhar para o backend
+      const response = await fetch('/api/add-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topicId: topicId as string,
+          messageCount: messageCount,
+          paymentTransactionId: transactionId
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`Compra realizada com sucesso! Você agora tem um total de ${data.newTotal} mensagens disponíveis.`);
+        
+        // Atualizar o estado local
+        if (messageAllowance) {
+          setMessageAllowance({
+            ...messageAllowance,
+            remainingMessages: messageAllowance.remainingMessages + messageCount,
+            totalAllowance: data.newTotal || (messageAllowance.totalAllowance + messageCount)
+          });
+        }
+        
+        // Recarregar os dados do servidor para garantir que estão atualizados
+        await fetchMessageAllowance(topicId as string);
+      } else {
+        alert(`Erro ao adicionar mensagens: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('Error purchasing messages:', error);
+      alert(`Erro ao processar a compra: ${error.message || 'Erro desconhecido'}`);
     }
   };
 
@@ -512,20 +666,46 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         )}
       </div>
       
+      {/* Adicionar indicador de mensagens restantes e botão para comprar mais */}
+      {messageAllowance && (
+        <div className={`px-4 py-2 flex items-center justify-between ${
+          messageAllowance.remainingMessages <= 3 ? 'text-red-400' : 'text-gray-400'
+        }`}>
+          <div className="text-xs">
+            {messageAllowance.remainingMessages > 0 ? (
+              `Mensagens restantes: ${messageAllowance.remainingMessages} de ${messageAllowance.totalAllowance}`
+            ) : (
+              <span className="text-red-400 font-bold">
+                Limite de mensagens atingido
+              </span>
+            )}
+          </div>
+          
+          <button 
+            onClick={() => setShowPaymentModal(true)}
+            className="text-xs bg-blue-600 hover:bg-blue-700 text-white rounded px-2 py-1 transition-colors"
+          >
+            Comprar mais mensagens
+          </button>
+        </div>
+      )}
+      
       <div className="px-4 py-2 border-t border-white/10">
         <div className="flex items-end space-x-2">
           <textarea 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Digite sua mensagem..."
+            placeholder={messageAllowance && messageAllowance.remainingMessages <= 0 
+              ? "Limite de mensagens atingido" 
+              : "Digite sua mensagem..."}
             className="flex-1 bg-white/10 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none min-h-[50px] max-h-[100px]"
             rows={2}
-            disabled={isLoading}
+            disabled={isLoading || !!(messageAllowance && messageAllowance.remainingMessages <= 0)}
           />
           <button
             onClick={handleSendMessage}
-            disabled={isLoading || input.trim() === ''}
+            disabled={isLoading || input.trim() === '' || !!(messageAllowance && messageAllowance.remainingMessages <= 0)}
             className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 h-10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -534,6 +714,17 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
           </button>
         </div>
       </div>
+      
+      {/* Modal de pagamento */}
+      {receiverAccountId && (
+        <MessagePaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onConfirm={handlePaymentConfirm}
+          tokenId={tokenId}
+          receiverAccountId={receiverAccountId}
+        />
+      )}
     </div>
   );
 };
