@@ -186,7 +186,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageIn
         </div>
       </div>
       
-      {usageInfo && (
+      {/* {usageInfo && (
         <div className="mt-6">
           <div className="flex justify-between mb-1">
             <span className="text-sm text-gray-300">Uso de recursos</span>
@@ -206,7 +206,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageIn
             {usageInfo.remainingUsage} unidades restantes
           </p>
         </div>
-      )}
+      )} */}
       
       <div className="mt-6 pt-4 border-t border-gray-700">
         <p className="text-sm text-gray-400">
@@ -581,11 +581,6 @@ const GetAccessPage = () => {
         <div className="relative z-10 container mx-auto px-4 py-12">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
-              <img
-                src="/logo.svg"
-                alt="SmartApp Studio Logo" 
-                className="h-16 w-auto mx-auto mb-4"
-              />
               <h1 className="text-3xl font-bold text-white">Acesso ao SmartApp Studio</h1>
               <p className="text-gray-300 mt-2">
                 Conecte sua carteira para verificar ou adquirir uma licença
