@@ -303,7 +303,7 @@ export const createTopic = async (metadata: NftMetadata): Promise<string> => {
     const transaction = new TopicCreateTransaction()
       .setAdminKey(operatorKey)
       .setSubmitKey(operatorKey)
-      .setTopicMemo(metadataStr.substring(0, 100)) // Memo has a 100 char limit
+      .setTopicMemo("License Main Topic - " + metadata.creator)
       .freezeWith(client);
     
     const signedTx = await transaction.sign(operatorKey);
@@ -569,11 +569,6 @@ export const createProjectTopic = async (projectName: string, ownerAccountId?: s
       createdAt: new Date().toISOString(),
       owner: ownerAccountId || client.operatorAccountId!.toString(),
       chatCount: chatCount,
-      messageAllowance: {
-        total: chatCount,
-        used: 0,
-        remaining: chatCount
-      }
     };
     
     const message = new TopicMessageSubmitTransaction()

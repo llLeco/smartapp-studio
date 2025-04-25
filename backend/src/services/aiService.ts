@@ -21,14 +21,14 @@ export interface ChatMessage {
 }
 
 /**
- * Interface para resposta de verificação de cota de mensagens
+ * Interface for subscription details
  */
-export interface MessageAllowanceResponse {
-  success: boolean;
-  remainingMessages: number;
-  totalAllowance: number;
-  messagesUsed: number;
-  error?: string;
+export interface SubscriptionDetails {
+  periodMonths: number;
+  projectLimit: number;
+  messageLimit: number;
+  priceUSD: number;
+  priceHSuite: number;
 }
 
 /**
@@ -40,19 +40,6 @@ export interface MessageAllowanceResponse {
  */
 export async function askAssistant(prompt: string, topicId?: string): Promise<any> {
   try {
-    // Verificar se o tópico tem mensagens disponíveis
-    if (topicId) {
-      const allowanceData = await getMessagesAllowance(topicId);
-      
-      if (!allowanceData.success) {
-        throw new Error(allowanceData.error || 'Failed to check message allowance');
-      }
-      
-      if (allowanceData.remainingMessages <= 0) {
-        return "Você atingiu o limite de mensagens disponíveis para este projeto. Por favor, adquira mais mensagens para continuar.";
-      }
-    }
-
     const completion = await openai.chat.completions.create({
       messages: [
         {
@@ -280,17 +267,7 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
  */
 async function recordConversationToTopic(topicId: string, question: string, answer: string): Promise<void> {
   try {
-    // Verificar e atualizar a contagem de mensagens
-    const allowanceData = await getMessagesAllowance(topicId);
-    
-    if (!allowanceData.success) {
-      throw new Error(allowanceData.error || 'Failed to check message allowance');
-    }
-    
-    if (allowanceData.remainingMessages <= 0) {
-      throw new Error('No message allowance remaining for this project');
-    }
-    
+
     // Set up client directly (similar to getClient implementation)
     const network = process.env.HEDERA_NETWORK || 'testnet';
     const operatorId = process.env.HEDERA_OPERATOR_ID;
@@ -336,9 +313,6 @@ async function recordConversationToTopic(topicId: string, question: string, answ
     const txResponse = await signedTx.execute(client);
     await txResponse.getReceipt(client);
     
-    // Atualizar a contagem de mensagens
-    await updateMessagesUsage(topicId);
-    
     console.log(`Recorded conversation to topic ${topicId}`);
   } catch (error) {
     console.error('Error recording conversation to topic:', error);
@@ -347,208 +321,31 @@ async function recordConversationToTopic(topicId: string, question: string, answ
 }
 
 /**
- * Obtém as informações de uso e permissões de mensagens para um tópico de projeto
- * @param projectTopicId O ID do tópico do projeto
- * @returns O número de mensagens restantes e dados de uso
+ * Records subscription information to a user's license topic
+ * @param licenseTopicId The user's license topic ID
+ * @param paymentTransactionId The transaction ID of the payment
+ * @param subscription Details of the subscription
+ * @returns Information about the subscription operation
  */
-export async function getMessagesAllowance(projectTopicId: string): Promise<MessageAllowanceResponse> {
-  try {
-    // Buscar mensagens do tópico do projeto
-    const messages = await getTopicMessages(projectTopicId);
-    
-    // Encontrar a mensagem de criação do projeto
-    const creationMessage = messages.find(msg => 
-      msg.content && (msg.content.type === 'PROJECT_CREATED' || msg.content.type === 'PROJECT_CREATION')
-    );
-    
-    if (!creationMessage) {
-      return {
-        success: false,
-        remainingMessages: 0,
-        totalAllowance: 0,
-        messagesUsed: 0,
-        error: 'Project creation message not found'
-      };
-    }
-    
-    // Obter o número total de chats permitidos da mensagem de criação
-    let chatCount = creationMessage.content.chatCount || 3; // Padrão para 3
-    let messagesUsed = 0;
-    
-    // Procurar pela mensagem de atualização mais recente
-    const updateMessages = messages.filter(msg => 
-      msg.content && msg.content.type === 'MESSAGE_ALLOWANCE_UPDATE'
-    );
-    
-    // Se houver mensagens de atualização, usar a mais recente para obter as informações
-    if (updateMessages.length > 0) {
-      // Ordenar por timestamp (mais recente primeiro)
-      updateMessages.sort((a, b) => {
-        return new Date(b.content.timestamp).getTime() - new Date(a.content.timestamp).getTime();
-      });
-      
-      const latestUpdate = updateMessages[0].content;
-      
-      // Se a mensagem tiver as informações completas, usar diretamente
-      if (latestUpdate.totalAllowance !== undefined && 
-          (latestUpdate.messagesUsed !== undefined || latestUpdate.remainingMessages !== undefined)) {
-        
-        // Priorizar o valor explícito de totalAllowance
-        chatCount = latestUpdate.totalAllowance;
-        
-        // Verificar se temos messagesUsed ou calculá-lo a partir de remainingMessages
-        if (latestUpdate.messagesUsed !== undefined) {
-          messagesUsed = latestUpdate.messagesUsed;
-        } else if (latestUpdate.remainingMessages !== undefined) {
-          messagesUsed = chatCount - latestUpdate.remainingMessages;
-        }
-        
-        // Retornar diretamente os valores da última atualização
-        return {
-          success: true,
-          remainingMessages: Math.max(0, chatCount - messagesUsed),
-          totalAllowance: chatCount,
-          messagesUsed
-        };
-      } else if (latestUpdate.newTotal !== undefined) {
-        // Compatibilidade com o formato anterior que usava newTotal
-        chatCount = latestUpdate.newTotal;
-      }
-    }
-    
-    // Se não encontramos uma mensagem de atualização com informações completas,
-    // contar mensagens do tipo CHAT_TOPIC
-    const chatMessages = messages.filter(msg => 
-      msg.content && msg.content.type === 'CHAT_TOPIC'
-    );
-    
-    messagesUsed = chatMessages.length;
-    const remainingMessages = chatCount - messagesUsed;
-    
-    return {
-      success: true,
-      remainingMessages: remainingMessages > 0 ? remainingMessages : 0,
-      totalAllowance: chatCount,
-      messagesUsed
-    };
-  } catch (error: any) {
-    console.error('Error getting messages allowance:', error);
-    return {
-      success: false,
-      remainingMessages: 0,
-      totalAllowance: 0,
-      messagesUsed: 0,
-      error: error.message || 'Failed to check message allowance'
-    };
-  }
-}
-
-/**
- * Atualiza o uso de mensagens em um tópico de projeto após uma nova mensagem
- * @param projectTopicId O ID do tópico do projeto
- * @returns Status da atualização
- */
-export async function updateMessagesUsage(projectTopicId: string): Promise<{
-  success: boolean;
-  error?: string;
-}> {
-  try {
-    // Verificar se ainda há permissões disponíveis
-    const allowance = await getMessagesAllowance(projectTopicId);
-    
-    if (!allowance.success) {
-      return { success: false, error: allowance.error };
-    }
-    
-    // Se não houver mais permissões, retornar erro
-    if (allowance.remainingMessages <= 0) {
-      return { 
-        success: false, 
-        error: 'No remaining message allowance for this project' 
-      };
-    }
-    
-    // Cria uma mensagem de atualização no tópico com as informações mais recentes
-    // Setup do cliente Hedera
-    const network = process.env.HEDERA_NETWORK || 'testnet';
-    const operatorId = process.env.HEDERA_OPERATOR_ID;
-    const operatorKey = process.env.HEDERA_OPERATOR_KEY;
-    
-    if (!operatorId || !operatorKey) {
-      throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
-    }
-    
-    let client;
-    switch(network) {
-      case 'mainnet':
-        client = Client.forMainnet();
-        break;
-      case 'previewnet':
-        client = Client.forPreviewnet();
-        break;
-      default:
-        client = Client.forTestnet();
-    }
-    
-    client.setOperator(operatorId, operatorKey);
-    
-    // Cria o conteúdo da mensagem de atualização
-    const messageContent = {
-      type: 'MESSAGE_ALLOWANCE_UPDATE',
-      totalAllowance: allowance.totalAllowance,
-      messagesUsed: allowance.messagesUsed + 1, // Incrementa para incluir a mensagem que acabou de ser enviada
-      remainingMessages: allowance.remainingMessages - 1, // Decrementa para refletir a mensagem atual
-      timestamp: new Date().toISOString()
-    };
-    
-    // Envia a mensagem para o tópico
-    const privateKey = PrivateKey.fromString(operatorKey);
-    
-    const transaction = new TopicMessageSubmitTransaction()
-      .setTopicId(TopicId.fromString(projectTopicId))
-      .setMessage(Buffer.from(JSON.stringify(messageContent)))
-      .freezeWith(client);
-    
-    const signedTx = await transaction.sign(privateKey);
-    const txResponse = await signedTx.execute(client);
-    await txResponse.getReceipt(client);
-    
-    console.log(`Updated message allowance for project ${projectTopicId}: ${allowance.remainingMessages - 1} messages remaining`);
-    
-    return { success: true };
-  } catch (error: any) {
-    console.error('Error updating messages usage:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Failed to update message usage' 
-    };
-  }
-}
-
-/**
- * Adiciona mais mensagens a um projeto
- * @param projectTopicId O ID do tópico do projeto
- * @param additionalMessages Quantidade de mensagens a adicionar
- * @returns Status da operação
- */
-export async function addMessagesToProject(
-  projectTopicId: string,
-  additionalMessages: number,
-  paymentTransactionId?: string
+export async function recordSubscriptionToTopic(
+  licenseTopicId: string, 
+  paymentTransactionId: string,
+  subscription: SubscriptionDetails
 ): Promise<{
   success: boolean;
-  newTotal?: number;
   error?: string;
+  subscriptionId?: string;
+  expiresAt?: string;
 }> {
   try {
-    console.log(`Adding ${additionalMessages} messages to project ${projectTopicId}`);
-    console.log(`Payment transaction ID: ${paymentTransactionId}`);
-    // Verificar se o ID da transação foi fornecido
+    console.log(`Recording subscription to license topic ${licenseTopicId}`);
+    
+    // Verify the payment transaction ID
     if (!paymentTransactionId) {
       return { success: false, error: 'Payment transaction ID is required' };
     }
     
-    // Verificar se a transação existe e é válida
+    // Verify transaction on the Hedera mirror node
     try {
       const network = process.env.HEDERA_NETWORK || 'testnet';
       const mirrorNodeUrl = {
@@ -561,31 +358,28 @@ export async function addMessagesToProject(
       
       // Extract account ID from the transaction ID
       const accountId = paymentTransactionId.split('@')[0];
-      console.log(`Extracted account ID: ${accountId}`);
+      console.log(`Verifying payment from account: ${accountId}`);
       
       // Format the transaction timestamp for filtering
       let timestamp = '';
       if (paymentTransactionId.includes('@')) {
         timestamp = paymentTransactionId.split('@')[1];
-        console.log(`Extracted timestamp: ${timestamp}`);
       }
       
-      // Instead of looking up by transaction ID, get recent transactions for the account
-      // This is more reliable as the mirror node indexes by account more quickly
+      // Look up recent transactions for this account
       const url = `${baseUrl}/api/v1/transactions?account.id=${accountId}&limit=10&order=desc`;
-      console.log(`Checking account transactions on Mirror Node: ${url}`);
+      console.log(`Checking account transactions: ${url}`);
       
       const response = await fetch(url);
-      console.log(`Response status: ${response.status}, OK: ${response.ok}`);
-
+      
       if (!response.ok) {
         throw new Error(`Failed to query transactions: ${response.status}`);
       }
       
       const txData = await response.json();
-      console.log(`Found ${txData.transactions?.length || 0} recent transactions for account ${accountId}`);
+      console.log(`Found ${txData.transactions?.length || 0} recent transactions`);
       
-      // Look for our specific transaction using timestamp
+      // Look for our specific transaction
       let found = false;
       if (txData.transactions && txData.transactions.length > 0) {
         // Format the transaction ID used in the response
@@ -593,66 +387,60 @@ export async function addMessagesToProject(
           `${accountId}-${timestamp.replace('.', '-')}` : 
           null;
           
-        console.log(`Looking for transaction ID: ${transactionIdToFind}`);
-        
         // Find matching transaction
         for (const tx of txData.transactions) {
-          console.log(`Checking transaction: ${tx.transaction_id} vs ${transactionIdToFind}`);
           if (tx.transaction_id === transactionIdToFind || 
               (tx.token_transfers && tx.result === 'SUCCESS')) {
-            console.log(`Found matching transaction: ${tx.transaction_id}, result: ${tx.result}`);
             found = true;
             
             if (tx.result !== 'SUCCESS') {
               return { success: false, error: `Transaction was not successful: ${tx.result}` };
             }
             
-            console.log(`Verified payment transaction ${paymentTransactionId} successfully`);
+            console.log(`Verified payment transaction successfully`);
             break;
           }
         }
       }
       
       if (!found) {
-        // If we couldn't find the exact transaction, return error
-        return { success: false, error: 'Transaction not found in recent account history' };
+        return { success: false, error: 'Payment transaction not found or not confirmed yet' };
       }
-      
     } catch (verifyError: any) {
       console.error('Error verifying transaction:', verifyError);
       return { success: false, error: `Failed to verify payment: ${verifyError.message}` };
     }
     
-    // Primeiro, verificamos o status atual das mensagens
-    const currentAllowance = await getMessagesAllowance(projectTopicId);
+    // Calculate the expiry date based on subscription period
+    const subscriptionDate = new Date();
+    const expiryDate = new Date(subscriptionDate);
+    expiryDate.setMonth(expiryDate.getMonth() + subscription.periodMonths);
     
-    if (!currentAllowance.success) {
-      return { success: false, error: currentAllowance.error };
-    }
+    // Generate a unique subscription ID
+    const subscriptionId = `sub-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
     
-    // Calcula o novo total
-    const newTotal = currentAllowance.totalAllowance + additionalMessages;
-    
-    // Cria o conteúdo da mensagem
+    // Create subscription message content
     const messageContent = {
-      type: 'MESSAGE_ALLOWANCE_UPDATE',
-      totalAllowance: newTotal,
-      messagesUsed: currentAllowance.messagesUsed,
-      remainingMessages: newTotal - currentAllowance.messagesUsed,
-      additionalMessages, // mantido para compatibilidade
-      previousTotal: currentAllowance.totalAllowance, // mantido para compatibilidade
-      newTotal, // mantido para compatibilidade
-      timestamp: new Date().toISOString(),
-      paymentTransactionId
+      type: 'SUBSCRIPTION_CREATED',
+      subscriptionId,
+      subscriptionDate: subscriptionDate.toISOString(),
+      expiresAt: expiryDate.toISOString(),
+      projectLimit: subscription.projectLimit,
+      messageLimit: subscription.messageLimit,
+      priceUSD: subscription.priceUSD,
+      priceHSuite: subscription.priceHSuite,
+      paymentTransactionId,
+      status: 'active',
+      timestamp: new Date().toISOString()
     };
     
-    // Setup do cliente Hedera
+    // Set up Hedera client 
     const network = process.env.HEDERA_NETWORK || 'testnet';
     const operatorId = process.env.HEDERA_OPERATOR_ID;
     const operatorKey = process.env.HEDERA_OPERATOR_KEY;
     
     if (!operatorId || !operatorKey) {
-      throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
+      return { success: false, error: 'Hedera credentials not configured' };
     }
     
     let client;
@@ -668,12 +456,11 @@ export async function addMessagesToProject(
     }
     
     client.setOperator(operatorId, operatorKey);
-    
-    // Envia a mensagem para o tópico
     const privateKey = PrivateKey.fromString(operatorKey);
     
+    // Submit the subscription message to the license topic
     const transaction = new TopicMessageSubmitTransaction()
-      .setTopicId(TopicId.fromString(projectTopicId))
+      .setTopicId(TopicId.fromString(licenseTopicId))
       .setMessage(Buffer.from(JSON.stringify(messageContent)))
       .freezeWith(client);
     
@@ -681,17 +468,18 @@ export async function addMessagesToProject(
     const txResponse = await signedTx.execute(client);
     await txResponse.getReceipt(client);
     
-    console.log(`Added ${additionalMessages} messages to project ${projectTopicId}, new total: ${newTotal}`);
+    console.log(`Subscription recorded to license topic ${licenseTopicId}, expires at ${expiryDate.toISOString()}`);
     
     return {
       success: true,
-      newTotal
+      subscriptionId,
+      expiresAt: expiryDate.toISOString()
     };
   } catch (error: any) {
-    console.error('Error adding messages to project:', error);
+    console.error('Error recording subscription:', error);
     return {
       success: false,
-      error: error.message || 'Failed to add messages to project'
+      error: error.message || 'Failed to record subscription'
     };
   }
-} 
+}

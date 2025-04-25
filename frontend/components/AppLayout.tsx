@@ -25,7 +25,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       <PageBackground />
       
       {/* Main content */}
-      <main className="relative z-10 pb-16">
+      <main className="relative z-10">
         {children}
       </main>
       

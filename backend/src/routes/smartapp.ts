@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { askAssistant, getChatMessages } from '../services/aiService';
+import { askAssistant, getChatMessages, recordSubscriptionToTopic, SubscriptionDetails } from '../services/aiService';
 
 const router = express.Router();
 
@@ -53,6 +53,79 @@ router.get('/messages/:topicId', async (req: Request, res: Response) => {
     return res.status(500).json({ 
       success: false, 
       error: 'Failed to retrieve chat messages' 
+    });
+  }
+});
+
+// Route to process subscription payments
+router.post('/subscription', async (req: Request, res: Response) => {
+  try {
+    const { 
+      licenseTopicId, 
+      paymentTransactionId, 
+      subscription 
+    } = req.body;
+    
+    // Validate required fields
+    if (!licenseTopicId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'License topic ID is required' 
+      });
+    }
+    
+    if (!paymentTransactionId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Payment transaction ID is required' 
+      });
+    }
+    
+    if (!subscription || typeof subscription !== 'object') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Subscription details are required' 
+      });
+    }
+    
+    // Validate subscription object fields
+    const requiredFields: (keyof SubscriptionDetails)[] = [
+      'periodMonths', 
+      'projectLimit', 
+      'messageLimit', 
+      'priceUSD', 
+      'priceHSuite'
+    ];
+    
+    for (const field of requiredFields) {
+      if (subscription[field] === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: `Subscription ${field} is required`
+        });
+      }
+    }
+    
+    console.log(`Processing subscription payment for license ${licenseTopicId}`);
+    console.log(`Subscription details:`, subscription);
+    
+    // Record the subscription information to the license topic
+    const result = await recordSubscriptionToTopic(
+      licenseTopicId,
+      paymentTransactionId,
+      subscription as SubscriptionDetails
+    );
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error('Error processing subscription:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to process subscription'
     });
   }
 });

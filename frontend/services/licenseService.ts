@@ -58,6 +58,76 @@ function api(path: string) {
   return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
 }
 
+// Cache for topic messages to avoid redundant API calls
+interface MessageCache {
+  [topicId: string]: {
+    messages: any[];
+    timestamp: number;
+  }
+}
+
+// Cache expiration time: 5 minutes
+const CACHE_EXPIRATION = 5 * 60 * 1000;
+
+// Global cache for topic messages
+const topicMessagesCache: MessageCache = {};
+
+/**
+ * Gets topic messages, using cache if available
+ * @param topicId The topic ID to get messages for
+ * @returns The topic messages
+ */
+export async function getTopicMessages(topicId: string) {
+  const now = Date.now();
+  const cachedData = topicMessagesCache[topicId];
+  
+  // Use cache if available and not expired
+  if (cachedData && (now - cachedData.timestamp < CACHE_EXPIRATION)) {
+    console.log(`Using cached messages for topic ${topicId}`);
+    return { success: true, data: cachedData.messages };
+  }
+  
+  // Fetch fresh data
+  try {
+    console.log(`Fetching messages for topic ${topicId}`);
+    const messagesRes = await fetch(api(`/api/hedera/topicMessages?topicId=${topicId}`));
+    
+    if (!messagesRes.ok) {
+      throw new Error('Failed to fetch topic messages');
+    }
+    
+    const result = await messagesRes.json();
+    
+    if (result.success && result.data) {
+      // Store in cache
+      topicMessagesCache[topicId] = {
+        messages: result.data,
+        timestamp: now
+      };
+    }
+    
+    return result;
+  } catch (error: any) {
+    console.error('Error fetching topic messages:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Clear the topic messages cache
+ * @param topicId Optional topic ID to clear specific cache
+ */
+export function clearTopicMessagesCache(topicId?: string) {
+  if (topicId) {
+    delete topicMessagesCache[topicId];
+  } else {
+    // Clear all cache
+    Object.keys(topicMessagesCache).forEach(key => {
+      delete topicMessagesCache[key];
+    });
+  }
+}
+
 // Mirror Node URL
 const MIRROR_NODE_URL = 
   process.env.NEXT_PUBLIC_MIRROR_NODE_URL || 
@@ -431,14 +501,8 @@ export interface Project {
 
 export async function getUserProjects(licenseTopic: string): Promise<Project[]> {
   try {
-    // Get all messages from the license topic
-    const messagesRes = await fetch(api(`/api/hedera/topicMessages?topicId=${licenseTopic}`));
-    
-    if (!messagesRes.ok) {
-      throw new Error('Failed to fetch topic messages');
-    }
-    
-    const { success, data: messages, error } = await messagesRes.json();
+    // Get all messages from the license topic using the cached function
+    const { success, data: messages, error } = await getTopicMessages(licenseTopic);
     
     if (!success || !messages) {
       throw new Error(error || 'Failed to fetch topic messages');

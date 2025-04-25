@@ -326,24 +326,19 @@ const GetAccessPage = () => {
   // Define steps
   const steps = [
     { 
-      key: 'createTopic', 
-      title: 'Criar Tópico', 
-      description: 'Criando tópico para sua licença' 
-    },
-    { 
-      key: 'mintToken', 
-      title: 'Preparar Licença', 
-      description: 'Configurando metadados da licença' 
+      key: 'createLicense', 
+      title: 'Creating License', 
+      description: 'Creating and minting your license token' 
     },
     { 
       key: 'associateToken', 
-      title: 'Emitir Token', 
-      description: 'Criando token de licença na blockchain' 
+      title: 'Associating Token', 
+      description: 'Associating token to your account' 
     },
     { 
       key: 'complete', 
-      title: 'Finalizar', 
-      description: 'Ativando a licença para uso' 
+      title: 'Receiving NFT', 
+      description: 'Receiving license in your wallet' 
     }
   ];
 
@@ -395,7 +390,7 @@ const GetAccessPage = () => {
     
     setShowSteps(true);
     setCurrentStepIndex(0);
-    setCurrentStep('createTopic');
+    setCurrentStep('createLicense');
     setStepStatus('pending');
     setStepError(undefined);
     setLicenseProcessData({});
@@ -415,8 +410,9 @@ const GetAccessPage = () => {
       setStepError(undefined);
       
       switch (currentStep) {
-        case 'createTopic': {
-          // Init and create topic in one step
+        case 'createLicense': {
+          // Merge createTopic and mintToken steps
+          // Step 1: Create topic
           const metadata: NftMetadata = {
             name: 'SmartApp License',
             description: 'Licença de acesso ao SmartApp Studio',
@@ -435,18 +431,11 @@ const GetAccessPage = () => {
             tokenId: topicState.tokenId
           });
           
-          setCurrentStep('mintToken');
-          setCurrentStepIndex(1);
-          setStepStatus('success');
-          break;
-        }
-        
-        case 'mintToken': {
-          // Mint token
+          // Step 2: Mint token (immediately after creating topic)
           const mintState = await licenseService.mintLicenseToken({
             step: 'mintToken',
-            topicId: licenseProcessData.topicId,
-            tokenId: licenseProcessData.tokenId,
+            topicId: topicState.topicId,
+            tokenId: topicState.tokenId,
             accountId
           });
           
@@ -456,12 +445,15 @@ const GetAccessPage = () => {
           
           setLicenseProcessData(prev => ({
             ...prev,
+            topicId: topicState.topicId,
+            tokenId: topicState.tokenId,
             serialNumber: mintState.serialNumber
           }));
           
+          // Move to associateToken step
           setCurrentStep('associateToken');
-          setCurrentStepIndex(2);
-          setStepStatus('success');
+          setCurrentStepIndex(1);
+          setStepStatus('pending');
           break;
         }
         
@@ -493,7 +485,7 @@ const GetAccessPage = () => {
           }
           
           setCurrentStep('complete');
-          setCurrentStepIndex(3);
+          setCurrentStepIndex(2);
           setStepStatus('success');
           
           // Check license after all steps
@@ -718,6 +710,32 @@ const GetAccessPage = () => {
                       >
                         Tentar Novamente
                       </button>
+                    ) : currentStep !== 'complete' ? (
+                      <>
+                        <button
+                          onClick={() => setShowSteps(false)}
+                          className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg shadow transition-colors"
+                        >
+                          Voltar
+                        </button>
+                        <button
+                          onClick={handleNextStep}
+                          disabled={loading}
+                          className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow transition-colors disabled:opacity-50"
+                        >
+                          {loading ? (
+                            <span className="flex items-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Processando...
+                            </span>
+                          ) : (
+                            'Próximo'
+                          )}
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={() => setShowSteps(false)}
