@@ -8,7 +8,8 @@ import { checkLicenseValidity, createNewProject, getUserProjects, Project, getTo
 import { 
   getSubscriptionDetails, 
   mapSubscriptionToInfo, 
-  SubscriptionInfo as SubInfo, 
+  SubscriptionInfo as SubInfo,
+  checkActiveSubscription
 } from '../../services/subscriptionService';
 
 // Configurar URL base do backend
@@ -74,19 +75,14 @@ const AppPage = () => {
         // Now fetch subscription which will use the cached topic messages
         await fetchSubscriptionDetails(info.topicId);
       } else {
-        // Set default subscription state if no license found
-        setSubscription({
-          active: false,
-          expired: false,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          projectLimit: 3,
-          messageLimit: 100,
-          projectsUsed: 0,
-          messagesUsed: 0
-        });
+        console.log('No license topic found, checking subscription by account');
+        // Try to get subscription info by account ID
+        await checkSubscriptionByAccount();
       }
     } catch (err) {
       console.error('Error fetching license info:', err);
+      // Even if there's an error, try to check subscription by account
+      await checkSubscriptionByAccount();
     }
   };
   
@@ -113,7 +109,7 @@ const AppPage = () => {
     }
   };
 
-  // Fetch subscription details
+  // Fetch subscription details - this version directly accesses the topic
   const fetchSubscriptionDetails = async (topicId: string) => {
     try {
       setLoadingSubscription(true);
@@ -123,14 +119,33 @@ const AppPage = () => {
       
       if (result.success && result.subscription) {
         console.log('Subscription details loaded:', result.subscription);
+        
+        // Check if this is a new subscription (reset project limits)
+        const isNewSubscription = result.isNewSubscription || false;
+        
         // Map the API subscription details to our frontend model
-        // Use the projects length as the projectsUsed count
-        const subscriptionInfo = mapSubscriptionToInfo(result.subscription, projects.length);
+        // When a new subscription is created, reset projectsUsed to 0
+        const projectCount = isNewSubscription ? 0 : projects.length;
+        const subscriptionInfo = mapSubscriptionToInfo(result.subscription, projectCount);
         
         // Log the status including expiration
         console.log(`Subscription status: active=${subscriptionInfo.active}, expired=${subscriptionInfo.expired}, expires=${new Date(subscriptionInfo.expiresAt).toLocaleDateString()}`);
+        console.log(`Project usage: ${projectCount}/${subscriptionInfo.projectLimit} (isNewSubscription=${isNewSubscription})`);
         
         setSubscription(subscriptionInfo);
+        
+        // If this is a new subscription, update the projects display in the UI
+        if (isNewSubscription) {
+          console.log("New subscription detected - resetting projects used count to 0");
+          
+          // Force update the UI without changing actual projects array
+          // This ensures the Create Project button is enabled
+          setProjects(prevProjects => {
+            // Simply return the same array to maintain references
+            // but UI will reflect the projectsUsed=0 from subscription
+            return [...prevProjects];
+          });
+        }
       } else {
         console.warn('No subscription found or error:', result.error);
         // Set default subscription state
@@ -146,6 +161,46 @@ const AppPage = () => {
       }
     } catch (err) {
       console.error('Error fetching subscription details:', err);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
+  // Check subscription by account ID - for scenarios where we don't have a topic ID yet
+  const checkSubscriptionByAccount = async () => {
+    if (!accountId) return;
+    
+    try {
+      setLoadingSubscription(true);
+      
+      const result = await checkActiveSubscription(accountId);
+      
+      if (result.active && result.subscription) {
+        console.log('Active subscription found for account:', accountId);
+        setSubscription(result.subscription);
+        
+        // If we got a licenseTopicId and we don't have licenseInfo yet, set it
+        if (result.licenseTopicId && !licenseInfo) {
+          setLicenseInfo({ topicId: result.licenseTopicId });
+          
+          // Also fetch projects
+          await fetchUserProjects(result.licenseTopicId);
+        }
+      } else {
+        console.warn('No active subscription for account:', accountId);
+        // Set default subscription state
+        setSubscription({
+          active: false,
+          expired: result.expired || false,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          projectLimit: 3,
+          messageLimit: 100,
+          projectsUsed: 0,
+          messagesUsed: 0
+        });
+      }
+    } catch (err) {
+      console.error('Error checking subscription by account:', err);
     } finally {
       setLoadingSubscription(false);
     }
@@ -195,7 +250,7 @@ const AppPage = () => {
           if (subscription) {
             setSubscription({
               ...subscription,
-              projectsUsed: projects.length + 1
+              projectsUsed: subscription.projectsUsed + 1
             });
           }
         }
@@ -376,7 +431,7 @@ const AppPage = () => {
                           <div className="flex items-center">
                             <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                             <span className="text-sm text-gray-300">
-                              <span className="font-medium text-white">{projects.length}</span>/{subscription.projectLimit} Projects
+                              <span className="font-medium text-white">{subscription.projectsUsed}</span>/{subscription.projectLimit} Projects
                             </span>
                           </div>
                           <div className="flex items-center">
@@ -398,7 +453,7 @@ const AppPage = () => {
                       )}
                       
                       {/* Create Project Button */}
-                      {subscription?.active && projects.length < subscription.projectLimit ? (
+                      {subscription?.active && subscription.projectsUsed < subscription.projectLimit ? (
                         <button 
                           onClick={handleCreateProject}
                           disabled={projectLoading}

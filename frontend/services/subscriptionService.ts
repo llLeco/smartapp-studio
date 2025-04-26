@@ -41,6 +41,7 @@ export interface SubscriptionInfo {
 export async function getSubscriptionDetails(topicId: string): Promise<{
   success: boolean;
   subscription?: SubscriptionDetails;
+  isNewSubscription?: boolean;
   error?: string;
 }> {
   try {
@@ -70,9 +71,20 @@ export async function getSubscriptionDetails(topicId: string): Promise<{
         
         const subscriptionData = subscriptionMessages[0].content || {};
         console.log('Using most recent subscription from:', subscriptionData.timestamp);
+        
+        // Check if this is a new subscription (created in the last hour)
+        const subscriptionTime = new Date(subscriptionData.timestamp);
+        const now = new Date();
+        const isNew = (now.getTime() - subscriptionTime.getTime()) <= 60 * 60 * 1000; // 1 hour
+        
+        if (isNew) {
+          console.log('This is a new subscription, project limits will be reset');
+        }
+        
         return {
           success: true,
-          subscription: subscriptionData as SubscriptionDetails
+          subscription: subscriptionData as SubscriptionDetails,
+          isNewSubscription: isNew
         };
       }
     }
@@ -111,4 +123,63 @@ export function mapSubscriptionToInfo(details: SubscriptionDetails, projectsUsed
     projectsUsed: projectsUsed,
     messagesUsed: 0 // This would need to be calculated elsewhere
   };
+}
+
+/**
+ * Check if a user has an active subscription
+ * @param accountId The Hedera account ID to check
+ * @returns True if the user has an active subscription
+ */
+export async function checkActiveSubscription(accountId: string): Promise<{
+  active: boolean;
+  expired?: boolean;
+  licenseTopicId?: string;
+  subscription?: SubscriptionInfo;
+  error?: string;
+}> {
+  try {
+    if (!accountId) {
+      return { active: false, error: 'No account ID provided' };
+    }
+    
+    // First, get the license topic ID for the user
+    const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const licenseResponse = await fetch(`${apiUrl}/api/hedera/getUserLicense?accountId=${accountId}`);
+    const licenseData = await licenseResponse.json();
+    
+    if (!licenseData.success || !licenseData.data?.topicId) {
+      console.warn('No license found for user:', accountId);
+      return { active: false, error: 'No license found for user' };
+    }
+    
+    const userLicenseTopicId = licenseData.data.topicId;
+    
+    // Now get subscription details
+    const result = await getSubscriptionDetails(userLicenseTopicId);
+    
+    if (result.success && result.subscription) {
+      // Map to subscription info
+      const subscriptionInfo = mapSubscriptionToInfo(result.subscription);
+      
+      // Check if it's active
+      console.log(`Subscription status check for ${accountId}: active=${subscriptionInfo.active}, expired=${subscriptionInfo.expired}`);
+      
+      return {
+        active: subscriptionInfo.active,
+        expired: subscriptionInfo.expired,
+        licenseTopicId: userLicenseTopicId,
+        subscription: subscriptionInfo
+      };
+    } else {
+      console.warn('No active subscription found for user:', accountId);
+      return { 
+        active: false, 
+        licenseTopicId: userLicenseTopicId,
+        error: result.error || 'No subscription found' 
+      };
+    }
+  } catch (error: any) {
+    console.error('Error checking subscription status:', error);
+    return { active: false, error: error.message || 'Error checking subscription status' };
+  }
 } 

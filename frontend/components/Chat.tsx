@@ -5,6 +5,7 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import MessagePaymentModal from './MessagePaymentModal';
 import { useWallet } from '../hooks/useWallet';
+import { getSubscriptionDetails, mapSubscriptionToInfo, checkActiveSubscription } from '../services/subscriptionService';
 
 // Configurar URL base do backend se necessário
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
@@ -58,8 +59,12 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const [tokenId] = useState(process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022');
   // Estado para armazenar o receiver account ID que virá da API
   const [receiverAccountId, setReceiverAccountId] = useState<string | null>(null);
+  // State for tracking subscription status
+  const [hasActiveSubscription, setHasActiveSubscription] = useState<boolean>(false);
+  const [checkingSubscription, setCheckingSubscription] = useState<boolean>(false);
+  const [licenseTopicId, setLicenseTopicId] = useState<string | null>(null);
 
-  // Buscar o operator ID quando o componente montar
+  // Fetch operator ID when component mounts
   useEffect(() => {
     const fetchOperatorId = async () => {
       try {
@@ -79,6 +84,44 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     
     fetchOperatorId();
   }, []);
+
+  // Function to check subscription status
+  const checkSubscriptionStatus = async () => {
+    if (!accountId) return;
+    
+    try {
+      setCheckingSubscription(true);
+      
+      // Use the centralized subscription service function
+      const result = await checkActiveSubscription(accountId);
+      
+      // Update subscription status
+      setHasActiveSubscription(result.active);
+      
+      // Update license topic ID if available
+      if (result.licenseTopicId) {
+        setLicenseTopicId(result.licenseTopicId);
+      }
+      
+      console.log(`Chat subscription check: active=${result.active}, expired=${result.expired || false}`);
+      
+      if (!result.active && result.error) {
+        console.warn('Subscription not active:', result.error);
+      }
+    } catch (err) {
+      console.error('Error checking subscription status:', err);
+      setHasActiveSubscription(false);
+    } finally {
+      setCheckingSubscription(false);
+    }
+  };
+
+  // Check subscription status when component mounts
+  useEffect(() => {
+    if (accountId) {
+      checkSubscriptionStatus();
+    }
+  }, [accountId]);
 
   useEffect(() => {
     // Carregar mensagens se houver um topicId
@@ -364,6 +407,12 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const handleSendMessage = async () => {
     if (input.trim() === '') return;
     
+    // Check subscription status first
+    if (!hasActiveSubscription) {
+      setShowPaymentModal(true);
+      return;
+    }
+    
     // Create a new user message
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -471,6 +520,13 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     }
   };
 
+  // Handle payment confirmation
+  const handlePaymentConfirm = () => {
+    setShowPaymentModal(false);
+    // Refresh subscription status
+    checkSubscriptionStatus();
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-4 py-2 scrollbar-custom">
@@ -551,21 +607,45 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Digite sua mensagem..."
+            placeholder={hasActiveSubscription ? "Digite sua mensagem..." : "Assine para enviar mensagens..."}
             className="flex-1 bg-white/10 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none min-h-[50px] max-h-[100px]"
             rows={2}
+            disabled={!hasActiveSubscription || checkingSubscription}
           />
           <button
-            onClick={handleSendMessage}
-            disabled={isLoading || input.trim() === ''}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 h-10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={hasActiveSubscription ? handleSendMessage : () => setShowPaymentModal(true)}
+            disabled={isLoading || input.trim() === '' || checkingSubscription}
+            className={`${hasActiveSubscription ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700'} text-white rounded-lg px-4 py-2 h-10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
+            {hasActiveSubscription ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
           </button>
         </div>
+        
+        {!hasActiveSubscription && !checkingSubscription && (
+          <div className="mt-2 text-center text-sm text-amber-400">
+            Você precisa de uma assinatura ativa para enviar mensagens
+          </div>
+        )}
       </div>
+      
+      {/* Payment modal */}
+      {showPaymentModal && (
+        <MessagePaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onConfirm={handlePaymentConfirm}
+          tokenId={tokenId}
+          receiverAccountId={receiverAccountId || ''}
+        />
+      )}
     </div>
   );
 };
