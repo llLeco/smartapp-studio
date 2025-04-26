@@ -17,6 +17,7 @@ interface SubscriptionModalProps {
   onConfirm: (transactionId: string) => void;
   tokenId: string;
   receiverAccountId: string;
+  isRenewal?: boolean;
 }
 
 const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
@@ -24,7 +25,8 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   onClose,
   onConfirm,
   tokenId,
-  receiverAccountId: propReceiverAccountId // Rename to indicate it's from props
+  receiverAccountId: propReceiverAccountId, // Rename to indicate it's from props
+  isRenewal = false
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -370,10 +372,10 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               
               <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                 <h3 className="text-xl leading-6 font-bold text-white" id="modal-headline">
-                  Premium Subscription
+                  {isRenewal ? 'Renew Subscription' : 'Premium Subscription'}
                 </h3>
                 <p className="mt-1 text-sm text-gray-400">
-                  Unlock the full potential of SmartApp Studio
+                  {isRenewal ? 'Continue using the full power of SmartApp Studio' : 'Unlock the full potential of SmartApp Studio'}
                 </p>
               </div>
             </div>
@@ -442,6 +444,21 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 </div>
               </div>
               
+              {/* Renewal banner - only show when in renewal mode */}
+              {isRenewal && !isSuccess && (
+                <div className="mt-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+                  <div className="flex">
+                    <svg className="h-5 w-5 text-amber-400 mr-2 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3c4.845 0 9 3.85 9 8.5 0 4.912-4.486 8.713-9.5 8.5-5.018-.214-8.5-3.699-8.5-8.5C3 6.85 7.155 3 12 3z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-amber-300 font-medium">Your subscription has expired</p>
+                      <p className="text-xs text-amber-200/70 mt-1">Renew now to continue using all your projects and create new ones.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {error && (
                 <div className="mt-4 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
                   <div className="flex">
@@ -466,8 +483,12 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         </div>
                       </div>
                       <div>
-                        <h4 className="text-lg font-semibold text-green-300">Subscription Activated!</h4>
-                        <p className="text-sm text-green-400">Your premium access has been confirmed</p>
+                        <h4 className="text-lg font-semibold text-green-300">
+                          {isRenewal ? 'Subscription Renewed!' : 'Subscription Activated!'}
+                        </h4>
+                        <p className="text-sm text-green-400">
+                          {isRenewal ? 'Your premium access has been extended' : 'Your premium access has been confirmed'}
+                        </p>
                       </div>
                     </div>
                     
@@ -508,7 +529,9 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   type="button"
                   className={`w-full sm:w-auto inline-flex justify-center rounded-lg px-6 py-2.5 ${
                     transaction 
-                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/30' 
+                      ? isRenewal 
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-lg shadow-amber-500/30'
+                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/30' 
                       : 'bg-gray-700'
                   } text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 ${
                     isProcessing || !transaction || isCreatingTransaction || isLoadingOperatorId
@@ -543,7 +566,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                       Initializing...
                     </span>
                   ) : (
-                    'Confirm Payment'
+                    isRenewal ? 'Renew Now' : 'Confirm Payment'
                   )}
                 </button>
                 <button
@@ -558,7 +581,11 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             ) : (
               <button
                 type="button"
-                className="w-full sm:w-auto inline-flex justify-center rounded-lg px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg shadow-green-500/30 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transform transition-transform hover:-translate-y-0.5"
+                className={`w-full sm:w-auto inline-flex justify-center rounded-lg px-6 py-2.5 ${
+                  isRenewal 
+                    ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 shadow-lg shadow-amber-500/30'
+                    : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg shadow-green-500/30'
+                } text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transform transition-transform hover:-translate-y-0.5`}
                 onClick={handleClose}
               >
                 <span className="flex items-center">

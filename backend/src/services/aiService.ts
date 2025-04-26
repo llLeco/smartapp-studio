@@ -414,7 +414,8 @@ export async function recordSubscriptionToTopic(
     // Calculate the expiry date based on subscription period
     const subscriptionDate = new Date();
     const expiryDate = new Date(subscriptionDate);
-    expiryDate.setMonth(expiryDate.getMonth() + subscription.periodMonths);
+    // expiryDate.setMonth(expiryDate.getMonth() + subscription.periodMonths);
+    expiryDate.setMinutes(expiryDate.getMinutes() + 5);
     
     // Generate a unique subscription ID
     const subscriptionId = `sub-${Date.now()}-${Math.floor(Math.random() * 100000)}`;

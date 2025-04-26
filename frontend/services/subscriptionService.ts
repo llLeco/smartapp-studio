@@ -25,6 +25,7 @@ export interface SubscriptionDetails {
  */
 export interface SubscriptionInfo {
   active: boolean;
+  expired: boolean;
   expiresAt: string;
   projectLimit: number;
   messageLimit: number;
@@ -52,13 +53,23 @@ export async function getSubscriptionDetails(topicId: string): Promise<{
     
     // Extract subscription details from topicMessages response
     if (data.success && data.data && data.data.length > 0) {
-      const subscriptionMessage = data.data.find(
+      // Filter all subscription messages
+      const subscriptionMessages = data.data.filter(
         (message: any) => message.type === 'SUBSCRIPTION_CREATED' || 
                           (message.content && message.content.type === 'SUBSCRIPTION_CREATED')
       );
       
-      if (subscriptionMessage) {
-        const subscriptionData = subscriptionMessage.content || {};
+      // If we have subscription messages, get the most recent one
+      if (subscriptionMessages.length > 0) {
+        // Sort by timestamp (newest first)
+        subscriptionMessages.sort((a: any, b: any) => {
+          const timeA = a.content?.timestamp ? new Date(a.content.timestamp).getTime() : 0;
+          const timeB = b.content?.timestamp ? new Date(b.content.timestamp).getTime() : 0;
+          return timeB - timeA;
+        });
+        
+        const subscriptionData = subscriptionMessages[0].content || {};
+        console.log('Using most recent subscription from:', subscriptionData.timestamp);
         return {
           success: true,
           subscription: subscriptionData as SubscriptionDetails
@@ -86,8 +97,14 @@ export async function getSubscriptionDetails(topicId: string): Promise<{
  * @returns Frontend subscription info
  */
 export function mapSubscriptionToInfo(details: SubscriptionDetails, projectsUsed: number = 0): SubscriptionInfo {
+  // Check if subscription is expired
+  const now = new Date();
+  const expiresAt = new Date(details.expiresAt);
+  const isExpired = now > expiresAt;
+  
   return {
-    active: details.status === 'active',
+    active: details.status === 'active' && !isExpired,
+    expired: isExpired,
     expiresAt: details.expiresAt,
     projectLimit: details.projectLimit,
     messageLimit: details.messageLimit,

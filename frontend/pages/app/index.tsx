@@ -5,7 +5,11 @@ import Head from 'next/head';
 import SubscriptionModal from '../../components/SubscriptionModal';
 import SubscriptionBanner from '../../components/SubscriptionBanner';
 import { checkLicenseValidity, createNewProject, getUserProjects, Project, getTokenDetails } from '../../services/licenseService';
-import { getSubscriptionDetails, mapSubscriptionToInfo, SubscriptionInfo as SubInfo } from '../../services/subscriptionService';
+import { 
+  getSubscriptionDetails, 
+  mapSubscriptionToInfo, 
+  SubscriptionInfo as SubInfo, 
+} from '../../services/subscriptionService';
 
 // Configurar URL base do backend
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
@@ -14,6 +18,7 @@ const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/'
 // Interface for subscription details
 interface SubscriptionInfo {
   active: boolean;
+  expired: boolean;
   expiresAt: string;
   projectLimit: number;
   messageLimit: number;
@@ -31,9 +36,11 @@ const AppPage = () => {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loadingSubscription, setLoadingSubscription] = useState(false);
+  const [renewalLoading, setRenewalLoading] = useState(false);
   
   // Estado para os modais
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [isRenewalMode, setIsRenewalMode] = useState(false);
   const [paymentData, setPaymentData] = useState<{
     tokenId: string;
     receiverAccountId: string;
@@ -70,6 +77,7 @@ const AppPage = () => {
         // Set default subscription state if no license found
         setSubscription({
           active: false,
+          expired: false,
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           projectLimit: 3,
           messageLimit: 100,
@@ -112,19 +120,23 @@ const AppPage = () => {
       console.log('Fetching subscription details for topic:', topicId);
       
       const result = await getSubscriptionDetails(topicId);
-      console.log('Subscription details loaded:', result);
       
       if (result.success && result.subscription) {
         console.log('Subscription details loaded:', result.subscription);
         // Map the API subscription details to our frontend model
         // Use the projects length as the projectsUsed count
         const subscriptionInfo = mapSubscriptionToInfo(result.subscription, projects.length);
+        
+        // Log the status including expiration
+        console.log(`Subscription status: active=${subscriptionInfo.active}, expired=${subscriptionInfo.expired}, expires=${new Date(subscriptionInfo.expiresAt).toLocaleDateString()}`);
+        
         setSubscription(subscriptionInfo);
       } else {
         console.warn('No subscription found or error:', result.error);
         // Set default subscription state
         setSubscription({
           active: false,
+          expired: false,
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           projectLimit: 3,
           messageLimit: 100,
@@ -183,7 +195,7 @@ const AppPage = () => {
           if (subscription) {
             setSubscription({
               ...subscription,
-              projectsUsed: subscription.projectsUsed + 1
+              projectsUsed: projects.length + 1
             });
           }
         }
@@ -198,61 +210,68 @@ const AppPage = () => {
     }
   };
   
-  const handlePurchaseSubscription = async () => {
-    // if (!accountId || !licenseInfo?.topicId) {
-    //   setProjectError('Conta ou licença não disponível. Verifique sua conexão.');
-    //   return;
-    // }
+  const handlePurchaseSubscription = async (isRenewal: boolean = false) => {
+    if (!accountId || !licenseInfo?.topicId) {
+      setProjectError('Conta ou licença não disponível. Verifique sua conexão.');
+      return;
+    }
     
-    // try {
-    //   // Get the HSUITE token ID from environment
-    //   const hsuiteTokenId = process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022';
+    try {
+      // Get the HSUITE token ID from environment
+      const hsuiteTokenId = process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022';
       
-    //   // Get operator ID for the transaction
-    //   const operatorRes = await fetch(api('/api/hedera/getOperatorId'));
-    //   const operatorData = await operatorRes.json();
+      // Get operator ID for the transaction
+      const operatorRes = await fetch(api('/api/hedera/getOperatorId'));
+      const operatorData = await operatorRes.json();
       
-    //   if (!operatorData.success || !operatorData.data) {
-    //     throw new Error('Operator ID not available');
-    //   }
+      if (!operatorData.success || !operatorData.data) {
+        throw new Error('Operator ID not available');
+      }
       
-    //   // Set up payment data
-    //   setPaymentData({
-    //     tokenId: hsuiteTokenId,
-    //     receiverAccountId: operatorData.data
-    //   });
+      // Set up payment data
+      setPaymentData({
+        tokenId: hsuiteTokenId,
+        receiverAccountId: operatorData.data
+      });
       
-    //   // Show the subscription payment modal
-    //   setShowSubscriptionModal(true);
+      // Set renewal mode
+      setIsRenewalMode(isRenewal);
       
-    // } catch (err: any) {
-    //   console.error('Error preparing subscription:', err);
-    //   setProjectError(err.message || 'Error preparing subscription');
-    // }
+      // Show the subscription payment modal
+      setShowSubscriptionModal(true);
+      
+    } catch (err: any) {
+      console.error('Error preparing subscription:', err);
+      setProjectError(err.message || 'Error preparing subscription');
+    }
   };
   
   const handleSubscriptionConfirm = async (transactionId: string) => {
-    // try {
-    //   // Fetch the updated subscription status from the backend
-    //   const response = await fetch(api(`/api/subscription/status?accountId=${accountId}`));
-    //   const data = await response.json();
+    try {
+      setRenewalLoading(true);
       
-    //   if (data.success) {
-    //     setSubscription({
-    //       active: true,
-    //       expiresAt: data.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    //       projectLimit: data.projectLimit || 3,
-    //       messageLimit: data.messageLimit || 100,
-    //       projectsUsed: data.projectsUsed || 0,
-    //       messagesUsed: data.messagesUsed || 0
-    //     });
-    //   }
-    // } catch (error) {
-    //   console.error('Error updating subscription status:', error);
-    // } finally {
-    //   // Always close the modal after handling the confirmation
-    //   setShowSubscriptionModal(false);
-    // }
+      // For both new and renewal subscriptions, just process the transaction ID
+      console.log('Subscription confirmed with transaction:', transactionId);
+      
+      // Simulate successful response
+      const success = true;
+      
+      if (success) {
+        // Refresh subscription details if we have a license topic
+        if (licenseInfo?.topicId) {
+          await fetchSubscriptionDetails(licenseInfo.topicId);
+        }
+        
+        // Hide any previous errors
+        setProjectError(null);
+      }
+    } catch (error: any) {
+      console.error('Error processing subscription:', error);
+      setProjectError(error.message || 'Error processing subscription');
+    } finally {
+      setRenewalLoading(false);
+      setShowSubscriptionModal(false);
+    }
   };
 
   const openProject = (projectId: string, projectName: string) => {
@@ -288,15 +307,39 @@ const AppPage = () => {
 
                 {/* Content Area */}
                 <div className="overflow-y-auto max-h-[calc(100vh-10rem)]">
-                  {/* Subscription Banner - only show when subscription is not active */}
-                  {(!subscription?.active) && (
+                  {/* Subscription Banner - only show when subscription is not active AND not expired */}
+                  {(!subscription?.active && !subscription?.expired) && (
                     <div className="px-8 py-8 border-b border-white/10">
                       <SubscriptionBanner 
                         subscription={subscription}
                         loading={loadingSubscription}
-                        onPurchase={handlePurchaseSubscription}
-                        isProcessing={projectLoading}
+                        onPurchase={() => handlePurchaseSubscription(false)}
+                        isProcessing={projectLoading || renewalLoading}
                       />
+                    </div>
+                  )}
+                  
+                  {/* Expired Subscription Banner */}
+                  {(subscription?.expired) && (
+                    <div className="px-8 py-6 border-b border-amber-500/20 bg-amber-900/10">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-600/20 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-medium text-amber-300">Your subscription has expired</h3>
+                          <p className="text-sm text-amber-200/70">Renew your subscription to continue using your projects and creating new ones.</p>
+                        </div>
+                        <button 
+                          onClick={() => handlePurchaseSubscription(true)}
+                          disabled={renewalLoading}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {renewalLoading ? 'Processing...' : 'Renew Now'}
+                        </button>
+                      </div>
                     </div>
                   )}
                   
@@ -355,7 +398,7 @@ const AppPage = () => {
                       )}
                       
                       {/* Create Project Button */}
-                      {subscription?.active && subscription.projectsUsed < subscription.projectLimit ? (
+                      {subscription?.active && projects.length < subscription.projectLimit ? (
                         <button 
                           onClick={handleCreateProject}
                           disabled={projectLoading}
@@ -379,9 +422,11 @@ const AppPage = () => {
                           )}
                         </button>
                       ) : (
-                        !subscription?.active && (
+                        (!subscription?.active || subscription?.expired) && (
                           <div className="text-sm text-gray-400 italic">
-                            Subscribe to create projects
+                            {subscription?.expired 
+                              ? 'Renew your subscription to create projects' 
+                              : 'Subscribe to create projects'}
                           </div>
                         )
                       )}
@@ -407,17 +452,33 @@ const AppPage = () => {
                         <p className="text-gray-400 text-center max-w-md">
                           {subscription?.active 
                             ? 'Get started by creating your first project using the button above' 
-                            : 'Subscribe to our service to start creating amazing smart app projects'}
+                            : subscription?.expired
+                              ? 'Renew your subscription to start creating projects again'
+                              : 'Subscribe to our service to start creating amazing smart app projects'}
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className={`grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 ${subscription?.expired ? 'opacity-60' : ''}`}>
                         {projects.map((project) => (
                           <div
                             key={project.projectTopicId}
-                            className="group relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/30 to-gray-900/70 backdrop-blur-sm hover:border-indigo-500/30 hover:from-indigo-900/10 hover:to-indigo-900/20 transition-all duration-300 cursor-pointer shadow-md"
-                            onClick={() => openProject(project.projectTopicId, project.projectName)}
+                            className={`group relative rounded-xl overflow-hidden border border-gray-700/50 bg-gradient-to-br from-gray-800/30 to-gray-900/70 backdrop-blur-sm hover:border-indigo-500/30 hover:from-indigo-900/10 hover:to-indigo-900/20 transition-all duration-300 ${subscription?.expired ? 'cursor-not-allowed' : 'cursor-pointer shadow-md'}`}
+                            onClick={subscription?.expired ? undefined : () => openProject(project.projectTopicId, project.projectName)}
                           >
+                            {/* Expired overlay */}
+                            {subscription?.expired && (
+                              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-10">
+                                <div className="bg-black/70 px-4 py-2 rounded-lg border border-amber-600/30">
+                                  <div className="flex items-center text-amber-500">
+                                    <svg className="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                    </svg>
+                                    <span className="text-xs font-medium">Locked</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
                             {/* Project card content */}
                             <div className="p-5">
                               <div className="flex items-center justify-between mb-4">
@@ -456,13 +517,14 @@ const AppPage = () => {
         </div>
       </div>
       
-      {/* Modais */}
+      {/* Subscription Modal */}
       <SubscriptionModal
         isOpen={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
         onConfirm={handleSubscriptionConfirm}
         tokenId={paymentData.tokenId}
         receiverAccountId={paymentData.receiverAccountId}
+        isRenewal={isRenewalMode}
       />
     </>
   );
