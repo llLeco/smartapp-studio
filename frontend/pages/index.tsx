@@ -6,6 +6,7 @@ import Link from 'next/link';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 import { useState, useEffect } from 'react';
 import SubscriptionModal from '../components/SubscriptionModal';
+import { getUserLicense } from '@/services/licenseService';
 
 export default function Home() {
   const router = useRouter();
@@ -230,6 +231,7 @@ export default function Home() {
                       <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8">Unlock Premium Features</h2>
                       <SubscriptionBanner
                         subscription={null}
+                        license={null}
                         loading={false}
                         onPurchase={handlePurchase}
                         isProcessing={isProcessing}
@@ -331,8 +333,11 @@ export default function Home() {
           setIsProcessing(false);
         }}
         onConfirm={handlePaymentConfirm}
-        tokenId={tokenId}
-        receiverAccountId={receiverAccountId || '0.0.1234567'} // Always provide a value
+        paymentData={{
+          tokenId: tokenId,
+          receiverAccountId: receiverAccountId || '0.0.1234567'
+        }}
+        license={null}
       />
 
       <BottomNavBar />

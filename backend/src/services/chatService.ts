@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { TopicId, TopicMessageSubmitTransaction, PrivateKey } from "@hashgraph/sdk";
 import { Client } from "@hashgraph/sdk";
-import { getTopicMessages } from "./hederaService";
+import { getTopicMessages } from "./topicService";
 
 dotenv.config();
 
@@ -18,6 +18,7 @@ export interface ChatMessage {
   question: string;
   answer: string;
   timestamp: string;
+  usageQuota?: number;
 }
 
 /**
@@ -38,7 +39,7 @@ export interface SubscriptionDetails {
  * @param topicId Hedera topic ID to record the conversation
  * @returns Generated response from the assistant
  */
-export async function askAssistant(prompt: string, topicId?: string): Promise<any> {
+export async function askAssistant(prompt: string, topicId: string, usageQuota: number): Promise<any> {
   try {
     const completion = await openai.chat.completions.create({
       messages: [
@@ -58,7 +59,7 @@ export async function askAssistant(prompt: string, topicId?: string): Promise<an
     
     // If topicId is provided, record the conversation to Hedera
     if (topicId) {
-      await recordConversationToTopic(topicId, prompt, responseContent || "No response generated");
+      await recordConversationToTopic(topicId, prompt, responseContent || "No response generated", usageQuota);
     }
 
     return responseContent;
@@ -164,11 +165,13 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
             
             // Check if this is a chat message
             if (content && content.type === 'CHAT_TOPIC' && content.question) {
+              console.log(`Message usageQuota from chunks: ${content.usageQuota !== undefined ? content.usageQuota : 'undefined'}`);
               chatMessages.push({
                 id: (parseInt(key.split('-')[0].split('.')[2]) || chatMessages.length + 1).toString(),
                 question: content.question,
                 answer: content.answer || "No answer available",
-                timestamp: content.timestamp || latestTimestamp
+                timestamp: content.timestamp || latestTimestamp,
+                usageQuota: content.usageQuota
               });
               console.log(`Added chat message from chunks: ${content.question.substring(0, 30)}...`);
             }
@@ -194,11 +197,13 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
                   try {
                     const content = JSON.parse(fixedJson);
                     if (content && content.type === 'CHAT_TOPIC' && content.question) {
+                      console.log(`Message usageQuota from regex extraction: ${content.usageQuota !== undefined ? content.usageQuota : 'undefined'}`);
                       chatMessages.push({
                         id: (parseInt(key.split('-')[0].split('.')[2]) || chatMessages.length + 1).toString(),
                         question: content.question,
                         answer: content.answer || "No answer available",
-                        timestamp: content.timestamp || latestTimestamp
+                        timestamp: content.timestamp || latestTimestamp,
+                        usageQuota: content.usageQuota
                       });
                       console.log(`Added chat message using regex extraction: ${content.question.substring(0, 30)}...`);
                     }
@@ -236,11 +241,13 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
         
         // Check if this is a chat message
         if (content && content.type === 'CHAT_TOPIC' && content.question) {
+          console.log(`Message usageQuota from direct message: ${content.usageQuota !== undefined ? content.usageQuota : 'undefined'}`);
           chatMessages.push({
             id: sequenceNumber.toString(),
             question: content.question,
             answer: content.answer || "No answer available",
-            timestamp: content.timestamp || timestamp
+            timestamp: content.timestamp || timestamp,
+            usageQuota: content.usageQuota
           });
           console.log(`Added chat message: ${content.question.substring(0, 30)}...`);
         }
@@ -250,6 +257,13 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
     }
     
     console.log(`Filtered to ${chatMessages.length} chat messages from topic ${topicId}`);
+    
+    // Log quota from last message if available
+    if (chatMessages.length > 0) {
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      console.log(`Last message has usageQuota: ${lastMsg.usageQuota !== undefined ? lastMsg.usageQuota : 'undefined'}`);
+    }
+    
     return chatMessages;
     
   } catch (error) {
@@ -265,8 +279,19 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
  * @param answer The AI's response
  * @returns Promise that resolves when the message is recorded
  */
-async function recordConversationToTopic(topicId: string, question: string, answer: string): Promise<void> {
+export async function recordConversationToTopic(topicId: string, question: string, answer: string, usageQuota: number): Promise<void> {
   try {
+    if (usageQuota <= 0) {
+      // Check if this is a first message with no quota yet
+      const messages = await getChatMessages(topicId);
+      if (messages.length === 0) {
+        // This is likely a new topic, set initial quota
+        console.log(`New topic detected: ${topicId}, initializing with default quota of 10`);
+        usageQuota = 10; // Set initial quota for new topics
+      } else {
+        throw new Error('Usage quota is 0');
+      }
+    }
 
     // Set up client directly (similar to getClient implementation)
     const network = process.env.HEDERA_NETWORK || 'testnet';
@@ -297,7 +322,8 @@ async function recordConversationToTopic(topicId: string, question: string, answ
       type: 'CHAT_TOPIC',
       question,
       answer,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      usageQuota: usageQuota - 1
     };
     
     // Get operator private key - non-null assertion is safe here because we check above
@@ -321,127 +347,24 @@ async function recordConversationToTopic(topicId: string, question: string, answ
 }
 
 /**
- * Records subscription information to a user's license topic
- * @param licenseTopicId The user's license topic ID
- * @param paymentTransactionId The transaction ID of the payment
- * @param subscription Details of the subscription
- * @returns Information about the subscription operation
+ * Updates the usage quota for a topic
+ * @param topicId The Hedera topic ID
+ * @param usageQuota The new usage quota value
+ * @returns Promise that resolves when the quota is updated
  */
-export async function recordSubscriptionToTopic(
-  licenseTopicId: string, 
-  paymentTransactionId: string,
-  subscription: SubscriptionDetails
-): Promise<{
-  success: boolean;
-  error?: string;
-  subscriptionId?: string;
-  expiresAt?: string;
-}> {
+export async function updateUsageQuota(topicId: string, usageQuota: number): Promise<void> {
   try {
-    console.log(`Recording subscription to license topic ${licenseTopicId}`);
-    
-    // Verify the payment transaction ID
-    if (!paymentTransactionId) {
-      return { success: false, error: 'Payment transaction ID is required' };
+    if (usageQuota < 0) {
+      throw new Error('Usage quota cannot be negative');
     }
-    
-    // Verify transaction on the Hedera mirror node
-    try {
-      const network = process.env.HEDERA_NETWORK || 'testnet';
-      const mirrorNodeUrl = {
-        mainnet: "https://mainnet-public.mirrornode.hedera.com",
-        testnet: "https://testnet.mirrornode.hedera.com",
-        previewnet: "https://previewnet.mirrornode.hedera.com"
-      };
-      
-      const baseUrl = mirrorNodeUrl[network as keyof typeof mirrorNodeUrl];
-      
-      // Extract account ID from the transaction ID
-      const accountId = paymentTransactionId.split('@')[0];
-      console.log(`Verifying payment from account: ${accountId}`);
-      
-      // Format the transaction timestamp for filtering
-      let timestamp = '';
-      if (paymentTransactionId.includes('@')) {
-        timestamp = paymentTransactionId.split('@')[1];
-      }
-      
-      // Look up recent transactions for this account
-      const url = `${baseUrl}/api/v1/transactions?account.id=${accountId}&limit=10&order=desc`;
-      console.log(`Checking account transactions: ${url}`);
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to query transactions: ${response.status}`);
-      }
-      
-      const txData = await response.json();
-      console.log(`Found ${txData.transactions?.length || 0} recent transactions`);
-      
-      // Look for our specific transaction
-      let found = false;
-      if (txData.transactions && txData.transactions.length > 0) {
-        // Format the transaction ID used in the response
-        const transactionIdToFind = timestamp ? 
-          `${accountId}-${timestamp.replace('.', '-')}` : 
-          null;
-          
-        // Find matching transaction
-        for (const tx of txData.transactions) {
-          if (tx.transaction_id === transactionIdToFind || 
-              (tx.token_transfers && tx.result === 'SUCCESS')) {
-            found = true;
-            
-            if (tx.result !== 'SUCCESS') {
-              return { success: false, error: `Transaction was not successful: ${tx.result}` };
-            }
-            
-            console.log(`Verified payment transaction successfully`);
-            break;
-          }
-        }
-      }
-      
-      if (!found) {
-        return { success: false, error: 'Payment transaction not found or not confirmed yet' };
-      }
-    } catch (verifyError: any) {
-      console.error('Error verifying transaction:', verifyError);
-      return { success: false, error: `Failed to verify payment: ${verifyError.message}` };
-    }
-    
-    // Calculate the expiry date based on subscription period
-    const subscriptionDate = new Date();
-    const expiryDate = new Date(subscriptionDate);
-    // expiryDate.setMonth(expiryDate.getMonth() + subscription.periodMonths);
-    expiryDate.setMinutes(expiryDate.getMinutes() + 5);
-    
-    // Generate a unique subscription ID
-    const subscriptionId = `sub-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-    
-    // Create subscription message content
-    const messageContent = {
-      type: 'SUBSCRIPTION_CREATED',
-      subscriptionId,
-      subscriptionDate: subscriptionDate.toISOString(),
-      expiresAt: expiryDate.toISOString(),
-      projectLimit: subscription.projectLimit,
-      messageLimit: subscription.messageLimit,
-      priceUSD: subscription.priceUSD,
-      priceHSuite: subscription.priceHSuite,
-      paymentTransactionId,
-      status: 'active',
-      timestamp: new Date().toISOString()
-    };
-    
-    // Set up Hedera client 
+
+    // Set up client using the pattern from other services
     const network = process.env.HEDERA_NETWORK || 'testnet';
     const operatorId = process.env.HEDERA_OPERATOR_ID;
     const operatorKey = process.env.HEDERA_OPERATOR_KEY;
     
     if (!operatorId || !operatorKey) {
-      return { success: false, error: 'Hedera credentials not configured' };
+      throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
     }
     
     let client;
@@ -457,11 +380,21 @@ export async function recordSubscriptionToTopic(
     }
     
     client.setOperator(operatorId, operatorKey);
-    const privateKey = PrivateKey.fromString(operatorKey);
     
-    // Submit the subscription message to the license topic
+    // Create quota update message content
+    const messageContent = {
+      type: 'CHAT_TOPIC_QUOTA_UPDATE',
+      timestamp: new Date().toISOString(),
+      usageQuota: usageQuota,
+      message: 'Quota update transaction'
+    };
+    
+    // Get operator private key
+    const privateKey = PrivateKey.fromString(operatorKey);
+
+    // Submit the message to the topic
     const transaction = new TopicMessageSubmitTransaction()
-      .setTopicId(TopicId.fromString(licenseTopicId))
+      .setTopicId(TopicId.fromString(topicId))
       .setMessage(Buffer.from(JSON.stringify(messageContent)))
       .freezeWith(client);
     
@@ -469,18 +402,9 @@ export async function recordSubscriptionToTopic(
     const txResponse = await signedTx.execute(client);
     await txResponse.getReceipt(client);
     
-    console.log(`Subscription recorded to license topic ${licenseTopicId}, expires at ${expiryDate.toISOString()}`);
-    
-    return {
-      success: true,
-      subscriptionId,
-      expiresAt: expiryDate.toISOString()
-    };
-  } catch (error: any) {
-    console.error('Error recording subscription:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to record subscription'
-    };
+    console.log(`Updated usage quota for topic ${topicId} to ${usageQuota}`);
+  } catch (error) {
+    console.error('Error updating usage quota:', error);
+    throw error;
   }
 }

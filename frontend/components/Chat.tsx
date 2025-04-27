@@ -5,7 +5,8 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import MessagePaymentModal from './MessagePaymentModal';
 import { useWallet } from '../hooks/useWallet';
-import { getSubscriptionDetails, mapSubscriptionToInfo, checkActiveSubscription } from '../services/subscriptionService';
+import { getSubscriptionDetails } from '@/services/subscriptionService';
+import { getUserLicense } from '@/services/licenseService';
 
 // Configurar URL base do backend se necessário
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
@@ -24,6 +25,7 @@ interface TopicMessage {
   question: string;
   answer: string;
   timestamp: string;
+  usageQuota?: number;
 }
 
 // Interface for pinned items
@@ -39,12 +41,13 @@ interface PinnedItem {
 }
 
 export interface ChatProps {
-  onSendMessage: (message: string) => Promise<string>;
+  onSendMessage: (message: string, usageQuota: number) => Promise<string>;
   generatedStructure: string | null;
   setPinnedItems?: (items: PinnedItem[]) => void;
 }
 
 const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinnedItems }) => {
+  const { accountId, isConnected } = useWallet();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -54,7 +57,6 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const router = useRouter();
   const { topicId } = router.query;
   const [localPinnedItems, setLocalPinnedItems] = useState<PinnedItem[]>([]);
-  const { accountId } = useWallet();
   // Token ID from environment variable
   const [tokenId] = useState(process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022');
   // Estado para armazenar o receiver account ID que virá da API
@@ -63,22 +65,24 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const [hasActiveSubscription, setHasActiveSubscription] = useState<boolean>(false);
   const [checkingSubscription, setCheckingSubscription] = useState<boolean>(false);
   const [licenseTopicId, setLicenseTopicId] = useState<string | null>(null);
+  // State to track current usage quota
+  const [currentUsageQuota, setCurrentUsageQuota] = useState<number>(0); // Start with zero, no messages allowed until we verify quota
+  const [showQuotaAlert, setShowQuotaAlert] = useState<boolean>(false);
 
   // Fetch operator ID when component mounts
   useEffect(() => {
     const fetchOperatorId = async () => {
       try {
-        const operatorRes = await fetch(api('/api/hedera/getOperatorId'));
+        const operatorRes = await fetch(api('/api/hedera/network'));
         const operatorData = await operatorRes.json();
-        
-        if (operatorData.success && operatorData.data) {
-          setReceiverAccountId(operatorData.data);
-          console.log('Operator ID obtido: ', operatorData.data);
-        } else {
-          console.error('Falha ao obter Operator ID');
+
+        if (!operatorData.success || !operatorData.operatorId) {
+          throw new Error('Operator ID not available');
         }
+
+        setReceiverAccountId(operatorData.operatorId);
       } catch (error) {
-        console.error('Erro ao buscar Operator ID:', error);
+        console.error('Error fetching Operator ID:', error);
       }
     };
     
@@ -91,22 +95,20 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     
     try {
       setCheckingSubscription(true);
-      
-      // Use the centralized subscription service function
-      const result = await checkActiveSubscription(accountId);
+
+      const license = await getUserLicense(accountId);
+      const response = await getSubscriptionDetails(license.topicId);
       
       // Update subscription status
-      setHasActiveSubscription(result.active);
+      setHasActiveSubscription(response.active || false);
       
       // Update license topic ID if available
-      if (result.licenseTopicId) {
-        setLicenseTopicId(result.licenseTopicId);
+      if (response.subscription?.subscriptionId) {
+        setLicenseTopicId(response.subscription.subscriptionId);
       }
       
-      console.log(`Chat subscription check: active=${result.active}, expired=${result.expired || false}`);
-      
-      if (!result.active && result.error) {
-        console.warn('Subscription not active:', result.error);
+      if (!response.active && response.error) {
+        console.warn('Subscription not active:', response.error);
       }
     } catch (err) {
       console.error('Error checking subscription status:', err);
@@ -158,13 +160,13 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     }
   }, [messages, setPinnedItems]);
 
-  const loadMessagesFromTopic = async (id: string) => {
+  const loadMessagesFromTopic = async (topicId: string) => {
     try {
       setIsLoadingHistory(true);
-      console.log(`Carregando mensagens do tópico: ${id}`);
+      console.log(`Carregando mensagens do tópico: ${topicId}`);
       
       // Fetch messages from the API
-      const response = await fetch(`/api/chat-messages?topicId=${id}`);
+      const response = await fetch(api(`/api/chat/messages/${topicId}`));
       
       if (!response.ok) {
         throw new Error(`Failed to fetch messages: ${response.status}`);
@@ -180,6 +182,34 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         const sortedMessages = [...data.messages].sort((a: TopicMessage, b: TopicMessage) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
+
+        console.log("🔍 Sorted messages:", sortedMessages);
+        
+        // Get the last message for usage quota
+        let quotaFound = false;
+        if (sortedMessages.length > 0) {
+          const lastMessage = sortedMessages[sortedMessages.length - 1];
+          console.log("🔍 Last message:", lastMessage);
+          console.log("🔍 Last message usageQuota:", lastMessage.usageQuota);
+          
+          if (lastMessage.usageQuota !== undefined) {
+            setCurrentUsageQuota(lastMessage.usageQuota);
+            quotaFound = true;
+            console.log(`🔍 Current usage quota set from last message: ${lastMessage.usageQuota}`);
+          } else {
+            console.log("🔍 No usage quota found in the last message");
+            
+            // If we don't find a usageQuota field, we need to check if this is a new topic
+            if (sortedMessages.length <= 2) {
+              // This might be a new topic - we should check with backend about initializing quota
+              console.log("🔍 This appears to be a new topic, may need initial quota");
+            }
+          }
+        }
+        
+        if (!quotaFound) {
+          console.log("No valid usage quota found in any messages");
+        }
         
         // Convert each topic message to two chat messages (user and assistant)
         sortedMessages.forEach((msg: TopicMessage, index: number) => {
@@ -203,14 +233,14 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         // Update state with loaded messages
         setMessages(chatMessages);
         
-        console.log(`Loaded ${chatMessages.length} messages from topic ${id}`);
+        console.log(`Loaded ${chatMessages.length} messages from topic ${topicId}`);
       } else {
         // If no messages were found, add a welcome message
         setMessages([
           {
             id: 'welcome',
             role: 'assistant',
-            content: `Bem-vindo ao chat do projeto com topicId: ${id}. Como posso ajudar você hoje?`,
+            content: `Welcome to the chat for the project with topicId: ${topicId}. How can I help you today?`,
             timestamp: new Date()
           }
         ]);
@@ -222,7 +252,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         {
           id: 'welcome',
           role: 'assistant',
-          content: `Bem-vindo ao chat. Houve um erro ao carregar o histórico, mas podemos continuar a conversa.`,
+          content: `Welcome to the chat. There was an error loading the history, but we can continue the conversation.`,
           timestamp: new Date()
         }
       ]);
@@ -413,6 +443,20 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       return;
     }
     
+    // Check for remaining quota
+    if (currentUsageQuota <= 0) {
+      setMessages(prevMessages => [
+        ...prevMessages,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: 'You do not have quota available for this topic. Please update your subscription or contact support.',
+          timestamp: new Date()
+        }
+      ]);
+      return;
+    }
+    
     // Create a new user message
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -432,7 +476,8 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       
       // Get response from AI
       console.log("🔄 Calling onSendMessage with input:", input);
-      const response = await onSendMessage(input);
+      console.log("🔄 Current usage quota:", currentUsageQuota);
+      const response = await onSendMessage(input, currentUsageQuota);
       console.log("🔄 Received response from AI:", response);
       console.log("🔄 Response type:", typeof response);
       console.log("🔄 Response length:", response?.length);
@@ -455,6 +500,9 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       // Save assistant message
       await saveMessageToTopic(assistantMessage);
       
+      // Update usage quota
+      setCurrentUsageQuota(prev => Math.max(0, prev - 1));
+      
       // Process new message for useful content
       console.log("🔄 Processing assistant response for useful content");
       processNewMessage(response);
@@ -468,7 +516,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'Desculpe, ocorreu um erro ao processar sua solicitação.',
+          content: 'Sorry, an error occurred while processing your request.',
           timestamp: new Date()
         }
       ]);
@@ -520,12 +568,61 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     }
   };
 
+  // Handle purchase more quota
+  const handlePurchaseMoreQuota = () => {
+    setShowPaymentModal(true);
+  };
+
   // Handle payment confirmation
-  const handlePaymentConfirm = () => {
+  const handlePaymentConfirm = async (transactionId: string, messageCount: number) => {
     setShowPaymentModal(false);
-    // Refresh subscription status
+    console.log(`Payment confirmed! Transaction ID: ${transactionId}, Message count: ${messageCount}`);
+
+    try {
+      // Send transaction details to backend to update quota
+      const response = await fetch('/api/chat', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topicId,
+          transactionId,
+          messageCount
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update quota');
+      }
+
+      const data = await response.json();
+      console.log('Quota updated successfully:', data);
+      
+      // Update local quota state
+      if (data.newQuota !== undefined) {
+        setCurrentUsageQuota(data.newQuota);
+      } else {
+        // If no specific quota returned, add the message count to current quota
+        setCurrentUsageQuota(prev => prev + messageCount);
+      }
+    } catch (error) {
+      console.error('Error updating quota:', error);
+      // Show error toast or notification here
+    }
+
+    // Refresh subscription status to reflect new quota
     checkSubscriptionStatus();
   };
+
+  // Effect to handle quota alerts
+  useEffect(() => {
+    if (currentUsageQuota <= 0 && !isLoadingHistory && messages.length > 0) {
+      setShowQuotaAlert(true);
+    } else {
+      setShowQuotaAlert(false);
+    }
+  }, [currentUsageQuota, isLoadingHistory, messages.length]);
 
   return (
     <div className="flex flex-col h-full">
@@ -537,7 +634,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
               <div className="h-3 w-3 bg-indigo-500 rounded-full"></div>
               <div className="h-3 w-3 bg-indigo-500 rounded-full"></div>
             </div>
-            <p className="mt-3 text-center">Carregando histórico de mensagens...</p>
+            <p className="mt-3 text-center">Loading message history...</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-white/60 pt-16">
@@ -545,7 +642,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
             <p className="text-center max-w-sm">
-              Envie uma mensagem para iniciar uma conversa com nossa IA.
+              Send a message to start a conversation with our AI.
             </p>
           </div>
         ) : (
@@ -602,22 +699,49 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       </div>
       
       <div className="px-4 py-2 border-t border-white/10">
+        {/* Quota status indicator */}
+        <div className="flex justify-between items-center mb-2">
+          <div className="flex items-center text-xs">
+            <span className="text-white/60 mr-2">Messages remaining:</span>
+            <span className={`font-medium ${currentUsageQuota > 0 ? 'text-green-400' : 'text-amber-400'}`}>
+              {currentUsageQuota > 0 ? currentUsageQuota : '0'}
+            </span>
+          </div>
+          
+          {currentUsageQuota <= 0 && (
+            <button 
+              onClick={handlePurchaseMoreQuota}
+              className="text-xs text-amber-400 hover:text-amber-300 underline"
+            >
+              Buy more messages
+            </button>
+          )}
+        </div>
+        
         <div className="flex items-end space-x-2">
           <textarea 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasActiveSubscription ? "Digite sua mensagem..." : "Assine para enviar mensagens..."}
+            placeholder={hasActiveSubscription ? "Type your message..." : "Subscribe to send messages..."}
             className="flex-1 bg-white/10 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none min-h-[50px] max-h-[100px]"
             rows={2}
-            disabled={!hasActiveSubscription || checkingSubscription}
+            disabled={!hasActiveSubscription || checkingSubscription || currentUsageQuota <= 0}
           />
           <button
-            onClick={hasActiveSubscription ? handleSendMessage : () => setShowPaymentModal(true)}
+            onClick={currentUsageQuota <= 0 ? handlePurchaseMoreQuota : (hasActiveSubscription ? handleSendMessage : () => setShowPaymentModal(true))}
             disabled={isLoading || input.trim() === '' || checkingSubscription}
-            className={`${hasActiveSubscription ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700'} text-white rounded-lg px-4 py-2 h-10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`${
+              currentUsageQuota <= 0 
+                ? 'bg-amber-600 hover:bg-amber-700' 
+                : (hasActiveSubscription ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700')
+            } text-white rounded-lg px-4 py-2 h-10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            {hasActiveSubscription ? (
+            {currentUsageQuota <= 0 ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : hasActiveSubscription ? (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
@@ -631,7 +755,13 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         
         {!hasActiveSubscription && !checkingSubscription && (
           <div className="mt-2 text-center text-sm text-amber-400">
-            Você precisa de uma assinatura ativa para enviar mensagens
+            You need an active subscription to send messages
+          </div>
+        )}
+        
+        {hasActiveSubscription && currentUsageQuota <= 0 && (
+          <div className="mt-2 text-center text-sm text-amber-400">
+            You need to purchase more messages to continue this conversation
           </div>
         )}
       </div>
@@ -651,3 +781,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
 };
 
 export default Chat; 
+
+function getSigner(accountId: string) {
+  throw new Error('Function not implemented.');
+}

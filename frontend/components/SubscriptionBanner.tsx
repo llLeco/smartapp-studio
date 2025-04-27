@@ -15,12 +15,14 @@ interface SubscriptionInfo {
 
 interface SubscriptionBannerProps {
   subscription: SubscriptionInfo | null;
+  license: any;
   loading: boolean;
   onPurchase: (tokenId?: string, receiverAccountId?: string) => void;
   isProcessing: boolean;
 }
 
 // Default token ID and receiver account ID
+//TODO: replace this 
 const DEFAULT_TOKEN_ID = process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022';
 const DEFAULT_RECEIVER_ID = process.env.NEXT_PUBLIC_RECEIVER_ACCOUNT_ID || '0.0.1234567';
 
@@ -151,8 +153,11 @@ const SubscriptionBanner: React.FC<SubscriptionBannerProps> = ({
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           onConfirm={handleConfirmPayment}
-          tokenId={selectedTokenId}
-          receiverAccountId={receiverAccountId}
+          paymentData={{
+            tokenId: selectedTokenId,
+            receiverAccountId: receiverAccountId
+          }}
+          license={subscription}
         />
       )}
     </div>

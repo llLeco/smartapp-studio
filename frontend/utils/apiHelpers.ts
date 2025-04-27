@@ -8,7 +8,7 @@
  * @param topicId The topic ID for the conversation
  * @returns The assistant's response as a string
  */
-export const askAssistant = async (message: string, topicId: string): Promise<string> => {
+export const askAssistant = async (message: string, topicId: string, usageQuota: number): Promise<string> => {
   console.log(`Sending message to topicId: ${topicId}`);
   
   try {
@@ -19,7 +19,8 @@ export const askAssistant = async (message: string, topicId: string): Promise<st
       },
       body: JSON.stringify({
         message,
-        topicId
+        topicId,
+        usageQuota
       }),
     });
 

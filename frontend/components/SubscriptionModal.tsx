@@ -2,21 +2,22 @@ import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useWallet } from '../hooks/useWallet';
 import { Transaction } from '@hashgraph/sdk';
-import { createPaymentTransaction, getTokenDetails } from '../services/licenseService';
+import { createPaymentTransaction, getTokenDetails, getUserLicense } from '../services/licenseService';
+import { executeSignedTransaction } from '@/services/hederaService';
 
 // Configure backend URL base
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
 
-// HSUITE Token ID
-const HSUITE_TOKEN_ID = process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022';
-
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (transactionId: string) => void;
-  tokenId: string;
-  receiverAccountId: string;
+  paymentData: {
+    tokenId: string; //HSUITE Token ID
+    receiverAccountId: string; //Operator ID
+  };
+  license: any;
   isRenewal?: boolean;
 }
 
@@ -24,8 +25,8 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
-  tokenId,
-  receiverAccountId: propReceiverAccountId, // Rename to indicate it's from props
+  paymentData,
+  license,
   isRenewal = false
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -40,13 +41,11 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   const [operatorId, setOperatorId] = useState<string | null>(null);
   const [isLoadingOperatorId, setIsLoadingOperatorId] = useState(false);
   const { accountId, signTransaction } = useWallet();
-  // DOM element for portal
   const [modalRoot, setModalRoot] = useState<HTMLElement | null>(null);
-  // Flag to prevent infinite loops
   const transactionPrepared = useRef(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [subscriptionDetails, setSubscriptionDetails] = useState<{ subscriptionId: string; expiresAt: string } | null>(null);
-  const isSubmitting = useRef(false); // Add ref to track submission state
+  const isSubmitting = useRef(false);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   
   // Subscription price in USD - from environment variable 
@@ -67,55 +66,31 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   
   // Fetch token details once when the modal opens
   useEffect(() => {
-    if (isOpen && tokenId === HSUITE_TOKEN_ID && tokenDecimals === null && !isLoadingTokenDetails) {
-      const fetchDetails = async () => {
+    if (isOpen && paymentData.tokenId && tokenDecimals === null && !isLoadingTokenDetails) {
+        const fetchDetails = async () => {
         try {
-          setIsLoadingTokenDetails(true);
-          console.log('Fetching token details for:', tokenId);
-          const details = await getTokenDetails(tokenId);
-          setTokenDecimals(details.decimals);
-          setDisplayAmount(formatAmount(hsuiteAmount, details.decimals));
-          console.log('Token details fetched, decimals:', details.decimals);
+            setIsLoadingTokenDetails(true);
+            console.log('Fetching token details for:', paymentData.tokenId);
+            const details = await getTokenDetails(paymentData.tokenId);
+            setTokenDecimals(details.decimals);
+            setDisplayAmount(formatAmount(hsuiteAmount, details.decimals));
+            console.log('Token details fetched, decimals:', details.decimals);
         } catch (err) {
-          console.error('Error fetching token details:', err);
-          setDisplayAmount(hsuiteAmount.toString());
+            console.error('Error fetching token details:', err);
+            setDisplayAmount(hsuiteAmount.toString());
         } finally {
-          setIsLoadingTokenDetails(false);
+            setIsLoadingTokenDetails(false);
         }
-      };
-      
-      fetchDetails();
-    } else if (isOpen && tokenId !== HSUITE_TOKEN_ID) {
-      // For other tokens, just set the display amount directly
-      setDisplayAmount(hsuiteAmount.toString());
+        };
+        
+        fetchDetails();
     }
-  }, [isOpen, tokenId, tokenDecimals, isLoadingTokenDetails, hsuiteAmount]);
+  }, [isOpen, paymentData.tokenId, tokenDecimals, isLoadingTokenDetails, hsuiteAmount]);
   
-  // Fetch operator ID when the modal opens
+  //TODO: Is this needed?
   useEffect(() => {
     if (isOpen && !operatorId && !isLoadingOperatorId) {
-      const fetchOperatorId = async () => {
-        try {
-          setIsLoadingOperatorId(true);
-          console.log('Fetching operator ID from backend...');
-          const response = await fetch(api('/api/hedera/getOperatorId'));
-          const result = await response.json();
-          
-          if (!result.success || !result.data) {
-            throw new Error(result.error || 'Failed to get operator ID');
-          }
-          
-          console.log('Operator ID fetched:', result.data);
-          setOperatorId(result.data);
-        } catch (err) {
-          console.error('Error fetching operator ID:', err);
-          setError('Failed to get receiver account information. Please try again.');
-        } finally {
-          setIsLoadingOperatorId(false);
-        }
-      };
-      
-      fetchOperatorId();
+        setOperatorId(paymentData.receiverAccountId);
     }
   }, [isOpen, operatorId, isLoadingOperatorId]);
   
@@ -181,51 +156,37 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       // Calculate the proper transaction amount based on token decimals
       let transactionAmount = hsuiteAmount;
       
-      if (tokenId === HSUITE_TOKEN_ID) {
+      if (paymentData.tokenId) {
         console.log('Preparing HSUITE token transaction');
         // Fetch token details if not already done
         if (tokenDecimals === null) {
           console.log('No token decimals available, fetching...');
-          try {
-            const details = await getTokenDetails(tokenId);
-            console.log('Token details fetched:', details);
-            setTokenDecimals(details.decimals);
-            // Calculate with proper scaling factor (multiply by 10^decimals)
-            const multiplier = Math.pow(10, details.decimals);
-            transactionAmount = hsuiteAmount * multiplier;
-            console.log(`Scaling transaction amount: ${hsuiteAmount} × 10^${details.decimals} = ${transactionAmount}`);
-          } catch (error) {
-            console.error('Error fetching token details:', error);
-            // Use default scaling if we couldn't get token details
-            transactionAmount = hsuiteAmount * 100000;
-            console.log('Using default scaling factor, amount:', transactionAmount);
-          }
+          return;
+        //   try {
+        //     const details = await getTokenDetails(paymentData.tokenId);
+        //     console.log('Token details fetched:', details);
+        //     setTokenDecimals(details.decimals);
+        //     // Calculate with proper scaling factor (multiply by 10^decimals)
+        //     const multiplier = Math.pow(10, details.decimals);
+        //     transactionAmount = hsuiteAmount * multiplier;
+        //   } catch (error) {
+        //     console.error('Error fetching token details:', error);
+        //     // Use default scaling if we couldn't get token details
+        //     transactionAmount = hsuiteAmount * 100000;
+        //   }
         } else {
           // Already have decimals info, use it directly
           const multiplier = Math.pow(10, tokenDecimals);
           transactionAmount = hsuiteAmount * multiplier;
-          console.log(`Using cached decimals: ${hsuiteAmount} × 10^${tokenDecimals} = ${transactionAmount}`);
         }
-      } else {
-        console.log(`Preparing transaction for non-HSUITE token: ${tokenId}`);
-      }
-      
-      // Use the operator ID as the receiver
-      const receiverAccountId = operatorId;
-      
-      console.log('Creating payment transaction with params:', {
-        tokenId,
-        amount: transactionAmount,
-        sender: accountId,
-        receiver: receiverAccountId
-      });
+      } else return;
       
       // Create the transaction
       const tx = await createPaymentTransaction(
-        tokenId,
+        paymentData.tokenId,
         transactionAmount,
         accountId,
-        receiverAccountId
+        operatorId
       );
       
       console.log('Transaction created successfully');
@@ -263,19 +224,14 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       const signedTransactionBytes = Buffer.from(signedTransaction.toBytes()).toString('base64');
       
       // Submit the signed transaction to execute the payment
-      const response = await fetch(api('/api/hedera/processProjectPayment'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signedTransactionBytes })
-      });
+      const response = await executeSignedTransaction(signedTransactionBytes);
+      console.log('Payment execution response:', response);
       
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Payment execution failed');
+      if (response.status !== 'SUCCESS') {
+        throw new Error('Payment execution failed');
       }
 
-      const transactionId = result.data.transactionId;
+      const transactionId = response.transactionId;
       if (!transactionId) {
         throw new Error('No transaction ID returned from backend');
       }
@@ -289,20 +245,13 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         priceHSuite: hsuiteAmount
       };
       
-      // Get license topic ID
-      const licenseResponse = await fetch(api(`/api/hedera/getUserLicense?accountId=${accountId}`));
-      const licenseData = await licenseResponse.json();
-      
-      if (!licenseData.success || !licenseData.data?.topicId) {
-        throw new Error('Failed to retrieve user license information');
-      }
       
       // Submit subscription data
-      const subscriptionResponse = await fetch(api('/api/subscription'), {
+      const subscriptionResponse = await fetch('/api/subscription?action=record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          licenseTopicId: licenseData.data.topicId,
+          licenseTopicId: license.topicId,
           paymentTransactionId: transactionId,
           subscription: subscriptionDetails
         })

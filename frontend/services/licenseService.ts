@@ -13,6 +13,7 @@ import {
 } from "@hashgraph/sdk";
 import getDAppConnector from "../lib/walletConnect";
 import type { DAppSigner } from "@hashgraph/hedera-wallet-connect";
+import { getTopicMessages } from "./topicService";
 
 // --- Types ---
 export interface NftMetadata {
@@ -37,7 +38,7 @@ export interface LicenseCreationState {
     | "createTopic"
     | "mintToken"
     | "associateToken"
-    | "recordMessage"
+    | "recordLicenseCreationMessage"
     | "transferToken"
     | "complete";
   metadata?: NftMetadata;
@@ -56,76 +57,6 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 function api(path: string) {
   return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
-}
-
-// Cache for topic messages to avoid redundant API calls
-interface MessageCache {
-  [topicId: string]: {
-    messages: any[];
-    timestamp: number;
-  }
-}
-
-// Cache expiration time: 5 minutes
-const CACHE_EXPIRATION = 5 * 60 * 1000;
-
-// Global cache for topic messages
-const topicMessagesCache: MessageCache = {};
-
-/**
- * Gets topic messages, using cache if available
- * @param topicId The topic ID to get messages for
- * @returns The topic messages
- */
-export async function getTopicMessages(topicId: string) {
-  const now = Date.now();
-  const cachedData = topicMessagesCache[topicId];
-  
-  // Use cache if available and not expired
-  if (cachedData && (now - cachedData.timestamp < CACHE_EXPIRATION)) {
-    console.log(`Using cached messages for topic ${topicId}`);
-    return { success: true, data: cachedData.messages };
-  }
-  
-  // Fetch fresh data
-  try {
-    console.log(`Fetching messages for topic ${topicId}`);
-    const messagesRes = await fetch(api(`/api/hedera/topicMessages?topicId=${topicId}`));
-    
-    if (!messagesRes.ok) {
-      throw new Error('Failed to fetch topic messages');
-    }
-    
-    const result = await messagesRes.json();
-    
-    if (result.success && result.data) {
-      // Store in cache
-      topicMessagesCache[topicId] = {
-        messages: result.data,
-        timestamp: now
-      };
-    }
-    
-    return result;
-  } catch (error: any) {
-    console.error('Error fetching topic messages:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Clear the topic messages cache
- * @param topicId Optional topic ID to clear specific cache
- */
-export function clearTopicMessagesCache(topicId?: string) {
-  if (topicId) {
-    delete topicMessagesCache[topicId];
-  } else {
-    // Clear all cache
-    Object.keys(topicMessagesCache).forEach(key => {
-      delete topicMessagesCache[key];
-    });
-  }
 }
 
 // Mirror Node URL
@@ -260,9 +191,6 @@ export async function mintLicenseToken(
   }
 }
 
-/**
- * Associates the given NFT token with the user's Hedera account via WalletConnect.
- */
 export async function associateLicenseToken(
   state: LicenseCreationState
 ): Promise<LicenseCreationState> {
@@ -281,7 +209,7 @@ export async function associateLicenseToken(
     const alreadyAssociated = await isTokenAssociated(accountId, licenseTokenId);
     if (alreadyAssociated) {
       console.log("Token already associated, skipping association");
-      return { ...state, step: "recordMessage" };
+      return { ...state, step: "recordLicenseCreationMessage" };
     }
 
     console.log(`Associating token ${licenseTokenId} with ${accountId} via WalletConnect`);
@@ -298,13 +226,13 @@ export async function associateLicenseToken(
     const tokenReceipt = await (await signedTokenTx.execute(client)).getReceipt(client);
     
     console.log("✅ Token associated successfully");
-    return { ...state, step: "recordMessage" };
+    return { ...state, step: "recordLicenseCreationMessage" };
   } catch (err: any) {
     // handle already‑associated error gracefully
     if (err.message && err.message.includes("TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT") || 
         err.message && err.message.includes("ALREADY_ASSOCIATED")) {
       console.log("Token already associated, continuing to next step");
-      return { ...state, step: "recordMessage" };
+      return { ...state, step: "recordLicenseCreationMessage" };
     }
     console.error("Error in associateLicenseToken:", err);
     return { ...state, error: err.message };
@@ -315,7 +243,7 @@ export async function recordLicenseMessage(
   state: LicenseCreationState
 ): Promise<LicenseCreationState> {
   try {
-    const res = await fetch(api("/api/hedera/recordMessage"), {
+    const res = await fetch(api("/api/hedera/recordLicenseCreationMessage"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -401,30 +329,20 @@ export async function createLicenseNft(
 }
 
 // check validity now via a single backend call
-export async function checkLicenseValidity(accountId: string) {
+export async function getUserLicense(accountId: string) {
   try {
-    const res = await fetch(api(`/api/hedera/getUserLicense?accountId=${accountId}`));
-    const { success, data, error } = await res.json();
+    const res = await fetch(api(`/api/license/user/${accountId}`));
+    const { success, license, error } = await res.json();
     
-    if (!success || !data) {
+    if (!success || !license) {
       console.log('No valid license found:', error || 'User has no license');
-      return { isValid: false, licenseInfo: null, usageInfo: null };
+      return null;
     }
     
-    return {
-      isValid: data.valid,
-      licenseInfo: {
-        tokenId: data.tokenId,
-        serialNumber: data.serialNumber,
-        topicId: data.topicId,
-        metadata: data.metadata,
-        ownerId: data.ownerId
-      },
-      usageInfo: data.usageInfo
-    };
+    return license;
   } catch (e) {
     console.error('Error checking license validity:', e);
-    return { isValid: false, licenseInfo: null, usageInfo: null };
+    return null;
   }
 }
 
@@ -433,7 +351,7 @@ export const createNewProject = async (
   licenseTopicId: string,
   accountId: string,
   projectName: string,
-  chatCount: number = 3
+  usageQuota: number = 3
 ): Promise<{ success: boolean; projectTopicId?: string; error?: string }> => {
   try {
     // Primeiro, crie o tópico do projeto
@@ -445,7 +363,7 @@ export const createNewProject = async (
       body: JSON.stringify({
         projectName,
         ownerAccountId: accountId,
-        chatCount
+        usageQuota
       }),
     });
 
@@ -468,7 +386,7 @@ export const createNewProject = async (
         projectTopicId,
         accountId,
         projectName,
-        chatCount,
+        usageQuota,
         timestamp: new Date().toISOString()
       }),
     });
@@ -479,7 +397,7 @@ export const createNewProject = async (
       throw new Error(recordResult.error || 'Failed to record project message');
     }
     
-    console.log(`Project created with ${chatCount} chat messages`);
+    console.log(`Project created with ${usageQuota} chat messages`);
     
     return { 
       success: true, 
@@ -497,36 +415,6 @@ export interface Project {
   projectName: string;
   createdAt: string;
   ownerAccountId: string;
-}
-
-export async function getUserProjects(licenseTopic: string): Promise<Project[]> {
-  try {
-    // Get all messages from the license topic using the cached function
-    const { success, data: messages, error } = await getTopicMessages(licenseTopic);
-    
-    if (!success || !messages) {
-      throw new Error(error || 'Failed to fetch topic messages');
-    }
-    
-    // Filter messages to find project creation messages
-    const projectMessages = messages.filter((msg: any) => 
-      msg.content && msg.content.type === 'PROJECT_CREATED'
-    );
-    
-    // Extract project data from messages
-    const projects: Project[] = projectMessages.map((msg: any) => ({
-      projectTopicId: msg.content.projectTopicId,
-      projectName: msg.content.projectName,
-      createdAt: msg.content.createdAt,
-      ownerAccountId: msg.content.ownerAccountId
-    }));
-    
-    console.log(`Found ${projects.length} projects for license topic ${licenseTopic}`);
-    return projects;
-  } catch (error: any) {
-    console.error('Error fetching user projects:', error);
-    return [];
-  }
 }
 
 /**

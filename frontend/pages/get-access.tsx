@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useWallet } from '../hooks/useWallet';
-import * as licenseService from '../services/licenseService';
+import { licenseService } from '../services';
 import Head from 'next/head';
 import PageBackground from '../components/PageBackground';
 
-// Interfaces para tipagem
+// Interfaces for typing
 interface NftMetadata {
   name: string;
   description: string;
@@ -26,11 +26,6 @@ interface LicenseInfo {
 interface AccessCardProps {
   licenseInfo: LicenseInfo | null;
   accountId: string | null;
-  usageInfo: {
-    totalUsage: number;
-    usageLimit: number;
-    remainingUsage: number;
-  } | null;
   activeSessions: Array<{
     topic: string;
     accountId: string;
@@ -115,13 +110,13 @@ const TransactionStep: React.FC<TransactionStepProps> = ({
 };
 
 // Componentes internos
-const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageInfo, activeSessions, onDisconnect }) => {
+const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, activeSessions, onDisconnect }) => {
   if (!licenseInfo) {
     return (
       <div className="p-6 backdrop-blur-lg bg-black/40 rounded-xl border border-gray-700 shadow-xl">
-        <h3 className="text-xl font-medium text-white">Sem Licença Ativa</h3>
+        <h3 className="text-xl font-medium text-white">No Active License</h3>
         <p className="mt-2 text-gray-300">
-          Você ainda não possui uma licença para acessar o SmartApp Studio.
+          You don't have a license to access SmartApp Studio yet.
         </p>
         {accountId && (
           <div className="mt-3 mb-4 px-3 py-2 bg-gray-800 rounded">
@@ -131,7 +126,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageIn
         
         {activeSessions.length > 0 && (
           <div className="mt-4">
-            <h4 className="text-sm font-medium text-white mb-2">Sessões ativas:</h4>
+            <h4 className="text-sm font-medium text-white mb-2">Active sessions:</h4>
             <div className="space-y-2">
               {activeSessions.map((session) => (
                 <div key={session.topic} className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded">
@@ -143,7 +138,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageIn
                     onClick={() => onDisconnect(session.topic)}
                     className="text-xs px-2 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 rounded transition-colors"
                   >
-                    Desconectar
+                    Disconnect
                   </button>
                 </div>
               ))}
@@ -157,66 +152,44 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageIn
   return (
     <div className="p-6 backdrop-blur-lg bg-black/40 rounded-xl border border-gray-700 shadow-xl">
       <div className="flex justify-between items-start">
-        <h3 className="text-xl font-medium text-white">Licença SmartApp</h3>
+        <h3 className="text-xl font-medium text-white">SmartApp License</h3>
         <span className="px-2 py-1 bg-green-900 text-green-300 text-xs rounded-full">
-          Ativa
+          Active
         </span>
       </div>
       
-      {/* Detalhes da licença */}
+      {/* License details */}
       <div className="mt-4 grid gap-3">
         <div className="flex justify-between">
-          <span className="text-gray-400">ID do Token:</span>
+          <span className="text-gray-400">Token ID:</span>
           <span className="text-white font-mono">{licenseInfo.tokenId}</span>
         </div>
         
         <div className="flex justify-between">
-          <span className="text-gray-400">Nº de Série:</span>
+          <span className="text-gray-400">Serial Number:</span>
           <span className="text-white font-mono">{licenseInfo.serialNumber}</span>
         </div>
         
         <div className="flex justify-between">
-          <span className="text-gray-400">Tipo:</span>
-          <span className="text-white">{licenseInfo.metadata?.type || 'Padrão'}</span>
+          <span className="text-gray-400">Type:</span>
+          <span className="text-white">{licenseInfo.metadata?.type || 'Standard'}</span>
         </div>
         
         <div className="flex justify-between">
-          <span className="text-gray-400">Tópico:</span>
+          <span className="text-gray-400">Topic:</span>
           <span className="text-white font-mono text-xs truncate max-w-[200px]">{licenseInfo.topicId}</span>
         </div>
       </div>
       
-      {/* {usageInfo && (
-        <div className="mt-6">
-          <div className="flex justify-between mb-1">
-            <span className="text-sm text-gray-300">Uso de recursos</span>
-            <span className="text-sm text-gray-300">
-              {usageInfo.totalUsage} / {usageInfo.usageLimit}
-            </span>
-          </div>
-          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-indigo-600" 
-              style={{
-                width: `${(usageInfo.totalUsage / usageInfo.usageLimit) * 100}%`
-              }}
-            ></div>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">
-            {usageInfo.remainingUsage} unidades restantes
-          </p>
-        </div>
-      )} */}
-      
       <div className="mt-6 pt-4 border-t border-gray-700">
         <p className="text-sm text-gray-400">
-          {accountId ? `Conectado como: ${accountId}` : 'Não conectado'}
+          {accountId ? `Connected as: ${accountId}` : 'Not connected'}
         </p>
       </div>
       
-      {activeSessions.length > 0 && (
+      {/* {activeSessions.length > 0 && (
         <div className="mt-4">
-          <h4 className="text-sm font-medium text-white mb-2">Sessões ativas:</h4>
+          <h4 className="text-sm font-medium text-white mb-2">Active sessions:</h4>
           <div className="space-y-2">
             {activeSessions.map((session) => (
               <div key={session.topic} className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded">
@@ -228,13 +201,13 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, usageIn
                   onClick={() => onDisconnect(session.topic)}
                   className="text-xs px-2 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 rounded transition-colors"
                 >
-                  Desconectar
+                  Disconnect
                 </button>
               </div>
             ))}
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };
@@ -251,10 +224,10 @@ const BuyLicenseButton: React.FC<BuyLicenseButtonProps> = ({ onClick, loading })
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        Processando...
+        Processing...
       </span>
     ) : (
-      <span>Adquirir Acesso</span>
+      <span>Get Access</span>
     )}
   </button>
 );
@@ -267,7 +240,7 @@ const LicenseStatus: React.FC<LicenseStatusProps> = ({ isValid, checking }) => {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <span>Verificando licença...</span>
+        <span>Verifying license...</span>
       </div>
     );
   }
@@ -278,7 +251,7 @@ const LicenseStatus: React.FC<LicenseStatusProps> = ({ isValid, checking }) => {
         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
-        <span>Licença válida</span>
+        <span>Valid license</span>
       </div>
     );
   }
@@ -288,17 +261,10 @@ const LicenseStatus: React.FC<LicenseStatusProps> = ({ isValid, checking }) => {
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
       </svg>
-      <span>Licença não encontrada</span>
+      <span>License not found</span>
     </div>
   );
 };
-
-// Interface para os tipos de uso
-interface UsageInfo {
-  totalUsage: number;
-  usageLimit: number;
-  remainingUsage: number;
-}
 
 const GetAccessPage = () => {
   const router = useRouter();
@@ -306,7 +272,6 @@ const GetAccessPage = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [checking, setChecking] = useState<boolean>(true);
   const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null);
-  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
   const [error, setError] = useState<string>('');
   const [showConfirmation, setShowConfirmation] = useState<boolean>(false);
   const [topicToDisconnect, setTopicToDisconnect] = useState<string | undefined>(undefined);
@@ -342,7 +307,7 @@ const GetAccessPage = () => {
     }
   ];
 
-  // Verificar se o usuário tem licença válida
+  // Check if user has a valid license
   useEffect(() => {
     const checkLicense = async () => {
       if (isConnected && accountId) {
@@ -350,21 +315,15 @@ const GetAccessPage = () => {
           setChecking(true);
           setError('');
           
-          const result = await licenseService.checkLicenseValidity(accountId);
+          const license = await licenseService.getUserLicense(accountId);
           
-          if (result.isValid && result.licenseInfo) {
-            setLicenseInfo(result.licenseInfo);
-            
-            // Obter informações de uso da licença (simulado)
-            setUsageInfo({
-              totalUsage: 0,
-              usageLimit: 100,
-              remainingUsage: 100
-            });
+          if (license) {
+            setLicenseInfo(license);
           }
+
         } catch (err: any) {
-          console.error('Erro ao verificar licença:', err);
-          setError(err.message || 'Erro ao verificar licença');
+          console.error('Error checking license:', err);
+          setError(err.message || 'Error checking license');
         } finally {
           setChecking(false);
         }
@@ -376,14 +335,14 @@ const GetAccessPage = () => {
     checkLicense();
   }, [isConnected, accountId]);
 
-  // Handler para iniciar o processo de licença
+  // Handler to start the license process
   const handleStartLicenseProcess = async () => {
     if (!isConnected || !accountId) {
       try {
         await connect();
         return; // Wait for the connect to trigger a re-render
       } catch (err) {
-        console.error('Erro ao conectar carteira:', err);
+        console.error('Error connecting wallet:', err);
         return;
       }
     }
@@ -395,7 +354,7 @@ const GetAccessPage = () => {
     setStepError(undefined);
     setLicenseProcessData({});
     
-    // Iniciar o processo
+    // Start the process
     await handleNextStep();
   };
 
@@ -415,7 +374,7 @@ const GetAccessPage = () => {
           // Step 1: Create topic
           const metadata: NftMetadata = {
             name: 'SmartApp License',
-            description: 'Licença de acesso ao SmartApp Studio',
+            description: 'Access license for SmartApp Studio',
             type: 'LICENSE'
           };
           
@@ -489,14 +448,9 @@ const GetAccessPage = () => {
           setStepStatus('success');
           
           // Check license after all steps
-          const result = await licenseService.checkLicenseValidity(accountId);
-          if (result.isValid && result.licenseInfo) {
-            setLicenseInfo(result.licenseInfo);
-            setUsageInfo({
-              totalUsage: 0,
-              usageLimit: 100,
-              remainingUsage: 100
-            });
+          const license = await licenseService.getUserLicense(accountId);
+          if (license) {
+            setLicenseInfo(license);
           }
           
           // Redirect to app after successful license creation
@@ -507,10 +461,10 @@ const GetAccessPage = () => {
         }
       }
     } catch (err: any) {
-      console.error('Erro no processo de licença:', err);
+      console.error('Error in license process:', err);
       setStepStatus('error');
-      setStepError(err.message || 'Erro no processo de licença');
-      setError(err.message || 'Erro no processo de licença');
+      setStepError(err.message || 'Error in license process');
+      setError(err.message || 'Error in license process');
     } finally {
       setLoading(false);
     }
@@ -540,13 +494,13 @@ const GetAccessPage = () => {
     }
   };
 
-  // Handler para desconectar a carteira
+  // Handler to disconnect wallet
   const handleDisconnect = (topic?: string) => {
     setTopicToDisconnect(topic);
     setShowConfirmation(true);
   };
   
-  // Confirmar desconexão
+  // Confirm disconnection
   const confirmDisconnect = async () => {
     try {
       if (topicToDisconnect) {
@@ -556,15 +510,15 @@ const GetAccessPage = () => {
       }
       setShowConfirmation(false);
     } catch (err) {
-      console.error('Erro ao desconectar:', err);
+      console.error('Error disconnecting:', err);
     }
   };
 
   return (
     <>
       <Head>
-        <title>Obter Acesso | SmartApp Studio</title>
-        <meta name="description" content="Obtenha acesso ao SmartApp Studio" />
+        <title>Get Access | SmartApp Studio</title>
+        <meta name="description" content="Get access to SmartApp Studio" />
       </Head>
       
       <div className="min-h-screen relative pb-16">
@@ -573,14 +527,14 @@ const GetAccessPage = () => {
         <div className="relative z-10 container mx-auto px-4 py-12">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-white">Acesso ao SmartApp Studio</h1>
+              <h1 className="text-3xl font-bold text-white">SmartApp Studio Access</h1>
               <p className="text-gray-300 mt-2">
-                Conecte sua carteira para verificar ou adquirir uma licença
+                Connect your wallet to verify or purchase a license
               </p>
             </div>
             
             <div className="bg-black/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl">
-              {/* Status da licença */}
+              {/* License status */}
               <div className="mb-6">
                 {checking ? (
                   <div className="flex items-center space-x-2 text-gray-300">
@@ -588,21 +542,21 @@ const GetAccessPage = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Verificando licença...</span>
+                    <span>Checking license...</span>
                   </div>
                 ) : licenseInfo ? (
                   <div className="flex items-center space-x-2 text-green-400">
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <span>Licença válida</span>
+                    <span>Valid license</span>
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2 text-yellow-300">
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                     </svg>
-                    <span>Licença não encontrada</span>
+                    <span>License not found</span>
                   </div>
                 )}
               </div>
@@ -615,25 +569,24 @@ const GetAccessPage = () => {
               
               {!showSteps ? (
                 <>
-                  {/* Cartão de licença */}
+                  {/* License card */}
                   <div className="mb-6">
                     <AccessCard 
                       licenseInfo={licenseInfo} 
                       accountId={accountId} 
-                      usageInfo={usageInfo}
                       activeSessions={activeSessions}
                       onDisconnect={handleDisconnect}
                     />
                   </div>
                   
-                  {/* Botões de ação */}
+                  {/* Action buttons */}
                   <div className="flex flex-col space-y-4">
                     {!isConnected ? (
                       <button
                         onClick={() => connect()}
                         className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-lg transition-colors"
                       >
-                        Conectar Carteira
+                        Connect Wallet
                       </button>
                     ) : !licenseInfo ? (
                       <>
@@ -648,10 +601,10 @@ const GetAccessPage = () => {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
-                              Processando...
+                              Processing...
                             </span>
                           ) : (
-                            <>Adquirir Licença</>
+                            <>Purchase License</>
                           )}
                         </button>
                         
@@ -659,7 +612,7 @@ const GetAccessPage = () => {
                           onClick={() => handleDisconnect()}
                           className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium shadow transition-colors"
                         >
-                          Desconectar Carteira
+                          Disconnect Wallet
                         </button>
                       </>
                     ) : (
@@ -668,14 +621,14 @@ const GetAccessPage = () => {
                           onClick={() => router.push('/app')}
                           className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-lg transition-colors"
                         >
-                          Acessar SmartApp Studio
+                          Access SmartApp Studio
                         </button>
                         
                         <button
                           onClick={() => handleDisconnect()}
                           className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium shadow transition-colors"
                         >
-                          Desconectar Carteira
+                          Disconnect Wallet
                         </button>
                       </>
                     )}
@@ -683,9 +636,9 @@ const GetAccessPage = () => {
                 </>
               ) : (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-medium text-white">Criando sua licença</h3>
+                  <h3 className="text-xl font-medium text-white">Creating your license</h3>
                   
-                  {/* Lista de etapas com fundo escuro para maior legibilidade */}
+                  {/* List of steps with dark background for better readability */}
                   <div className="space-y-3 bg-black/40 p-5 rounded-xl border border-gray-700">
                     {steps.map((step, index) => (
                       <TransactionStep
@@ -701,14 +654,14 @@ const GetAccessPage = () => {
                     ))}
                   </div>
                   
-                  {/* Botões de ação */}
+                  {/* Action buttons */}
                   <div className="flex justify-end space-x-3 pt-4">
                     {stepStatus === 'error' ? (
                       <button
                         onClick={handleRetry}
                         className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition-colors"
                       >
-                        Tentar Novamente
+                        Try Again
                       </button>
                     ) : currentStep !== 'complete' ? (
                       <>
@@ -716,7 +669,7 @@ const GetAccessPage = () => {
                           onClick={() => setShowSteps(false)}
                           className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg shadow transition-colors"
                         >
-                          Voltar
+                          Back
                         </button>
                         <button
                           onClick={handleNextStep}
@@ -729,10 +682,10 @@ const GetAccessPage = () => {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
-                              Processando...
+                              Processing...
                             </span>
                           ) : (
-                            'Próximo'
+                            'Next'
                           )}
                         </button>
                       </>
@@ -741,7 +694,7 @@ const GetAccessPage = () => {
                         onClick={() => setShowSteps(false)}
                         className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg shadow transition-colors"
                       >
-                        Voltar
+                        Back
                       </button>
                     )}
                   </div>
@@ -752,9 +705,9 @@ const GetAccessPage = () => {
             {/* Additional information */}
             <div className="mt-8 text-center">
               <p className="text-gray-300 text-sm">
-                Precisa de ajuda? Entre em contato com nosso suporte em{' '}
-                <a href="mailto:suporte@smartapp.studio" className="text-blue-300 hover:underline">
-                  suporte@smartapp.studio
+                Need help? Contact our support at{' '}
+                <a href="mailto:support@smartapp.studio" className="text-blue-300 hover:underline">
+                  support@smartapp.studio
                 </a>
               </p>
             </div>
@@ -766,24 +719,24 @@ const GetAccessPage = () => {
       {showConfirmation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-white mb-4">Confirmar desconexão</h3>
+            <h3 className="text-lg font-medium text-white mb-4">Confirm disconnection</h3>
             <p className="text-gray-300 mb-6">
               {topicToDisconnect 
-                ? "Tem certeza que deseja desconectar esta sessão?"
-                : "Tem certeza que deseja desconectar todas as sessões ativas?"}
+                ? "Are you sure you want to disconnect this session?"
+                : "Are you sure you want to disconnect all active sessions?"}
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowConfirmation(false)}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 onClick={confirmDisconnect}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
               >
-                Desconectar
+                Disconnect
               </button>
             </div>
           </div>

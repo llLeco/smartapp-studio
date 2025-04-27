@@ -4,12 +4,13 @@ import { useWallet } from '../../hooks/useWallet';
 import Head from 'next/head';
 import SubscriptionModal from '../../components/SubscriptionModal';
 import SubscriptionBanner from '../../components/SubscriptionBanner';
-import { checkLicenseValidity, createNewProject, getUserProjects, Project, getTokenDetails } from '../../services/licenseService';
+import ProjectCreateModal from '../../components/ProjectCreateModal';
+import { getUserLicense, createNewProject, Project, getTokenDetails } from '../../services/licenseService';
+import { createProject, getUserProjects } from '../../services/projectService';
 import { 
   getSubscriptionDetails, 
   mapSubscriptionToInfo, 
   SubscriptionInfo as SubInfo,
-  checkActiveSubscription
 } from '../../services/subscriptionService';
 
 // Configurar URL base do backend
@@ -41,6 +42,7 @@ const AppPage = () => {
   
   // Estado para os modais
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showProjectCreateModal, setShowProjectCreateModal] = useState(false);
   const [isRenewalMode, setIsRenewalMode] = useState(false);
   const [paymentData, setPaymentData] = useState<{
     tokenId: string;
@@ -64,25 +66,20 @@ const AppPage = () => {
     if (!accountId) return;
     
     try {
-      const { licenseInfo: info } = await checkLicenseValidity(accountId);
-      console.log('License info loaded:', info);
-      setLicenseInfo(info);
-      
+      const license = await getUserLicense(accountId);
+
       // If we have a license topic, fetch projects and subscription
-      if (info?.topicId) {
+      if (license && license?.topicId) {
+        setLicenseInfo(license);
         // First fetch projects and then subscription details to make use of the cache
-        await fetchUserProjects(info.topicId);
+        await fetchUserProjects(license.topicId);
         // Now fetch subscription which will use the cached topic messages
-        await fetchSubscriptionDetails(info.topicId);
+        await fetchSubscriptionDetails(license.topicId);
       } else {
         console.log('No license topic found, checking subscription by account');
-        // Try to get subscription info by account ID
-        await checkSubscriptionByAccount();
       }
     } catch (err) {
       console.error('Error fetching license info:', err);
-      // Even if there's an error, try to check subscription by account
-      await checkSubscriptionByAccount();
     }
   };
   
@@ -90,9 +87,7 @@ const AppPage = () => {
   const fetchUserProjects = async (topicId: string) => {
     try {
       setLoadingProjects(true);
-      console.log('Fetching projects for topic:', topicId);
       const userProjects = await getUserProjects(topicId);
-      console.log('User projects loaded:', userProjects);
       setProjects(userProjects);
       
       // Update projects used count in subscription if it exists
@@ -121,16 +116,12 @@ const AppPage = () => {
         console.log('Subscription details loaded:', result.subscription);
         
         // Check if this is a new subscription (reset project limits)
-        const isNewSubscription = result.isNewSubscription || false;
+        const isNewSubscription = result.active || false;
         
         // Map the API subscription details to our frontend model
         // When a new subscription is created, reset projectsUsed to 0
         const projectCount = isNewSubscription ? 0 : projects.length;
         const subscriptionInfo = mapSubscriptionToInfo(result.subscription, projectCount);
-        
-        // Log the status including expiration
-        console.log(`Subscription status: active=${subscriptionInfo.active}, expired=${subscriptionInfo.expired}, expires=${new Date(subscriptionInfo.expiresAt).toLocaleDateString()}`);
-        console.log(`Project usage: ${projectCount}/${subscriptionInfo.projectLimit} (isNewSubscription=${isNewSubscription})`);
         
         setSubscription(subscriptionInfo);
         
@@ -166,47 +157,7 @@ const AppPage = () => {
     }
   };
 
-  // Check subscription by account ID - for scenarios where we don't have a topic ID yet
-  const checkSubscriptionByAccount = async () => {
-    if (!accountId) return;
-    
-    try {
-      setLoadingSubscription(true);
-      
-      const result = await checkActiveSubscription(accountId);
-      
-      if (result.active && result.subscription) {
-        console.log('Active subscription found for account:', accountId);
-        setSubscription(result.subscription);
-        
-        // If we got a licenseTopicId and we don't have licenseInfo yet, set it
-        if (result.licenseTopicId && !licenseInfo) {
-          setLicenseInfo({ topicId: result.licenseTopicId });
-          
-          // Also fetch projects
-          await fetchUserProjects(result.licenseTopicId);
-        }
-      } else {
-        console.warn('No active subscription for account:', accountId);
-        // Set default subscription state
-        setSubscription({
-          active: false,
-          expired: result.expired || false,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          projectLimit: 3,
-          messageLimit: 100,
-          projectsUsed: 0,
-          messagesUsed: 0
-        });
-      }
-    } catch (err) {
-      console.error('Error checking subscription by account:', err);
-    } finally {
-      setLoadingSubscription(false);
-    }
-  };
-
-  const handleCreateProject = async () => {
+  const handleCreateProject = async (projectName: string) => {
     if (!accountId || !licenseInfo?.topicId) {
       setProjectError('Conta ou licença não disponível. Verifique sua conexão.');
       return;
@@ -221,14 +172,10 @@ const AppPage = () => {
     try {
       setProjectLoading(true);
       
-      // Create a project name with timestamp to make it unique
-      const projectName = `Project ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
-      
-      // Use a fixed message limit for the new project
-      const result = await createNewProject(
-        licenseInfo.topicId,
-        accountId,
+      // Use the project name provided by the user
+      const result = await createProject(
         projectName,
+        accountId,
         10 // Default message limit per project
       );
       
@@ -262,6 +209,7 @@ const AppPage = () => {
       setProjectError(err.message || 'Erro ao criar projeto');
     } finally {
       setProjectLoading(false);
+      setShowProjectCreateModal(false);
     }
   };
   
@@ -273,20 +221,26 @@ const AppPage = () => {
     
     try {
       // Get the HSUITE token ID from environment
-      const hsuiteTokenId = process.env.NEXT_PUBLIC_HSUITE_TOKEN_ID || '0.0.2203022';
+      const hsuiteTokenIdRes = await fetch(api('/api/hedera/hsuitetokenid'));
+      const hsuiteTokenIdData = await hsuiteTokenIdRes.json();
+      const hsuiteTokenId = hsuiteTokenIdData.tokenId;
+
+      console.log('HSUITE token ID:', hsuiteTokenId);
       
       // Get operator ID for the transaction
-      const operatorRes = await fetch(api('/api/hedera/getOperatorId'));
+      const operatorRes = await fetch(api('/api/hedera/network'));
       const operatorData = await operatorRes.json();
+
+      console.log('Operator ID:', operatorData);
       
-      if (!operatorData.success || !operatorData.data) {
+      if (!operatorData.success || !operatorData.operatorId) {
         throw new Error('Operator ID not available');
       }
       
       // Set up payment data
       setPaymentData({
         tokenId: hsuiteTokenId,
-        receiverAccountId: operatorData.data
+        receiverAccountId: operatorData.operatorId
       });
       
       // Set renewal mode
@@ -367,6 +321,7 @@ const AppPage = () => {
                     <div className="px-8 py-8 border-b border-white/10">
                       <SubscriptionBanner 
                         subscription={subscription}
+                        license={licenseInfo}
                         loading={loadingSubscription}
                         onPurchase={() => handlePurchaseSubscription(false)}
                         isProcessing={projectLoading || renewalLoading}
@@ -455,7 +410,7 @@ const AppPage = () => {
                       {/* Create Project Button */}
                       {subscription?.active && subscription.projectsUsed < subscription.projectLimit ? (
                         <button 
-                          onClick={handleCreateProject}
+                          onClick={() => setShowProjectCreateModal(true)}
                           disabled={projectLoading}
                           className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-lg font-medium text-white shadow-lg hover:from-blue-700 hover:to-indigo-800 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                         >
@@ -577,9 +532,17 @@ const AppPage = () => {
         isOpen={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
         onConfirm={handleSubscriptionConfirm}
-        tokenId={paymentData.tokenId}
-        receiverAccountId={paymentData.receiverAccountId}
+        paymentData={paymentData}
+        license={licenseInfo}
         isRenewal={isRenewalMode}
+      />
+      
+      {/* Project Create Modal */}
+      <ProjectCreateModal
+        isOpen={showProjectCreateModal}
+        onClose={() => setShowProjectCreateModal(false)}
+        onConfirm={handleCreateProject}
+        isProcessing={projectLoading}
       />
     </>
   );

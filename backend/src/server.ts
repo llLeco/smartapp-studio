@@ -1,8 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import smartappRoutes from './routes/smartapp';
-import hederaRoutes from './routes/hedera';
+import routes from './routes';
 
 // Load environment variables
 dotenv.config();
@@ -15,8 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api', smartappRoutes);
-app.use('/api/hedera', hederaRoutes);
+app.use('/api', routes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

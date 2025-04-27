@@ -118,14 +118,14 @@ export default function ProjectChatPage() {
   };
 
   // Function to handle sending messages to the AI
-  const handleSendMessage = async (message: string) => {
+  const handleSendMessage = async (message: string, usageQuota: number) => {
     if (!topicId) {
       throw new Error('No topicId provided');
     }
     
     try {
       // Use the askAssistant function to send the message to the AI
-      const response = await askAssistant(message, topicId as string);
+      const response = await askAssistant(message, topicId as string, usageQuota);
       return response;
     } catch (error) {
       console.error('Error sending message to AI:', error);
