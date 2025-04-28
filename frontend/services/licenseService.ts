@@ -14,6 +14,7 @@ import {
 import getDAppConnector from "../lib/walletConnect";
 import type { DAppSigner } from "@hashgraph/hedera-wallet-connect";
 import { createTopic, getTopicMessages } from "./topicService";
+import { getTokenDetails } from "./hederaService";
 
 // --- Types ---
 export interface NftMetadata {
@@ -719,32 +720,5 @@ export async function createMessagePaymentTransaction(
   } catch (error: any) {
     console.error('Error creating message payment transaction:', error);
     throw new Error('Failed to create message payment transaction: ' + error.message);
-  }
-}
-
-/**
- * Fetch token details from mirror node to get decimals
- */
-export async function getTokenDetails(tokenId: string): Promise<{ decimals: number }> {
-  try {
-    const url = `${MIRROR_NODE_URL}/api/v1/tokens/${tokenId}`;
-    console.log(`Fetching token details from: ${url}`);
-    
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Mirror node error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log('Token details:', data);
-    
-    // Return the decimals value
-    return {
-      decimals: data.decimals || 0
-    };
-  } catch (error) {
-    console.error('Error fetching token details:', error);
-    throw error;
   }
 }

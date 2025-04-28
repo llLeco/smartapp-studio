@@ -27,6 +27,7 @@ export interface Project {
 export async function createProject(
   projectName: string,
   ownerAccountId: string,
+  ownerLicenseTopicId: string,
   usageQuota: number = 3
 ): Promise<{
   success: boolean;
@@ -54,6 +55,19 @@ export async function createProject(
     const result = await response.json();
     
     if (result.success && result.topicId) {
+      // Record the project to the license
+      const recordResult = await recordProjectToLicense(
+        ownerLicenseTopicId,
+        result.topicId,
+        ownerAccountId,
+        projectName,
+        usageQuota
+      );
+      
+      if (!recordResult.success) {
+        throw new Error(recordResult.error || 'Failed to record project to license');
+      }
+      
       return {
         success: true,
         projectTopicId: result.topicId

@@ -186,7 +186,6 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         console.log("🔍 Sorted messages:", sortedMessages);
         
         // Get the most recent quota from any message type
-        // Check if any message has a quota update (priority is given to any message with quota, starting from the most recent)
         let foundQuota = false;
         let mostRecentQuota = 0;
         
@@ -195,15 +194,10 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
           const msg = sortedMessages[i];
           console.log(`🔍 Checking message ${i} for quota:`, msg.id, msg.usageQuota);
           
-          if (msg.usageQuota !== undefined) {
+          if (msg.usageQuota !== undefined && msg.usageQuota !== null) {
             console.log(`🔍 Found quota in message ${msg.id}: ${msg.usageQuota}`);
             mostRecentQuota = msg.usageQuota;
             foundQuota = true;
-            
-            // If this is a quota update message (has quota-prefix), we might want to filter it out from display
-            if (msg.id.startsWith('quota-')) {
-              console.log(`🔍 Message ${msg.id} is a quota update message`);
-            }
           }
         }
         
@@ -273,15 +267,36 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     }
   };
 
-  const saveMessageToTopic = async (message: Message) => {
+  const saveMessageToTopic = async (message: Message, usageQuota?: number) => {
     if (!topicId) return;
     
     try {
-      // This is handled by the backend now via the askAssistant function
-      // We just need to log for debugging
-      console.log(`Message to topic ${topicId}:`, message);
+      // Send message to backend with current usage quota
+      const response = await fetch(api(`/api/chat/messages/${topicId}`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: {
+            ...message,
+            usageQuota: usageQuota !== undefined ? usageQuota : currentUsageQuota
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save message');
+      }
+
+      const result = await response.json();
+      
+      // Update local quota if backend returns a new value
+      if (result.usageQuota !== undefined) {
+        setCurrentUsageQuota(result.usageQuota);
+      }
     } catch (error) {
-      console.error('Erro ao salvar mensagem:', error);
+      console.error('Error saving message:', error);
     }
   };
 
@@ -483,21 +498,14 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     setIsLoading(true);
     
     try {
-      // Save user message
-      await saveMessageToTopic(userMessage);
+      // Save user message with current quota
+      await saveMessageToTopic(userMessage, currentUsageQuota);
       
       // Get response from AI
       console.log("🔄 Calling onSendMessage with input:", input);
       console.log("🔄 Current usage quota:", currentUsageQuota);
       const response = await onSendMessage(input, currentUsageQuota);
       console.log("🔄 Received response from AI:", response);
-      console.log("🔄 Response type:", typeof response);
-      console.log("🔄 Response length:", response?.length);
-      
-      // Verify response
-      if (!response) {
-        console.error("🔴 Empty response received from AI");
-      }
       
       // Create assistant message
       const assistantMessage: Message = {
@@ -509,15 +517,15 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
       
-      // Save assistant message
-      await saveMessageToTopic(assistantMessage);
+      // Save assistant message with decremented quota
+      const newQuota = Math.max(0, currentUsageQuota - 1);
+      await saveMessageToTopic(assistantMessage, newQuota);
       
-      // Update usage quota locally (backend already decrements it in the topic)
-      setCurrentUsageQuota(prev => Math.max(0, prev - 1));
-      console.log("🔄 Updated local quota:", currentUsageQuota - 1);
+      // Update local quota
+      setCurrentUsageQuota(newQuota);
+      console.log("🔄 Updated local quota:", newQuota);
       
       // Process new message for useful content
-      console.log("🔄 Processing assistant response for useful content");
       processNewMessage(response);
       
     } catch (error) {

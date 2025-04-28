@@ -5,7 +5,7 @@ import Head from 'next/head';
 import SubscriptionModal from '../../components/SubscriptionModal';
 import SubscriptionBanner from '../../components/SubscriptionBanner';
 import ProjectCreateModal from '../../components/ProjectCreateModal';
-import { getUserLicense, createNewProject, Project, getTokenDetails } from '../../services/licenseService';
+import { getUserLicense, Project } from '../../services/licenseService';
 import { createProject, getUserProjects } from '../../services/projectService';
 import { 
   getSubscriptionDetails, 
@@ -44,10 +44,6 @@ const AppPage = () => {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showProjectCreateModal, setShowProjectCreateModal] = useState(false);
   const [isRenewalMode, setIsRenewalMode] = useState(false);
-  const [paymentData, setPaymentData] = useState<{
-    tokenId: string;
-    receiverAccountId: string;
-  }>({ tokenId: '', receiverAccountId: '' });
 
   useEffect(() => {
     // Redirecionar para a página de acesso se não estiver conectado
@@ -176,6 +172,7 @@ const AppPage = () => {
       const result = await createProject(
         projectName,
         accountId,
+        licenseInfo.topicId,
         10 // Default message limit per project
       );
       
@@ -236,12 +233,6 @@ const AppPage = () => {
       if (!operatorData.success || !operatorData.operatorId) {
         throw new Error('Operator ID not available');
       }
-      
-      // Set up payment data
-      setPaymentData({
-        tokenId: hsuiteTokenId,
-        receiverAccountId: operatorData.operatorId
-      });
       
       // Set renewal mode
       setIsRenewalMode(isRenewal);
@@ -532,8 +523,6 @@ const AppPage = () => {
         isOpen={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
         onConfirm={handleSubscriptionConfirm}
-        paymentData={paymentData}
-        license={licenseInfo}
         isRenewal={isRenewalMode}
       />
       

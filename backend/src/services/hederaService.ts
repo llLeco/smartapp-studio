@@ -120,12 +120,3 @@ export const getLicenseCollectionId = (): string | null => {
   }
   return tokenId;
 }
-
-export const getLicenseTokenId = (): string | null => {
-  const tokenId = process.env.LICENSE_TOKEN_ID;
-  if (!tokenId) {
-    console.warn('LICENSE_TOKEN_ID environment variable is not set');
-    return null;
-  }
-  return tokenId;
-}

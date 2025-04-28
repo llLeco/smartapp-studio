@@ -6,6 +6,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:300
 function api(path: string) {
   return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
 }
+const MIRROR_NODE_URL = process.env.NEXT_PUBLIC_MIRROR_NODE_URL || "https://testnet.mirrornode.hedera.com";
 
 // --- Types ---
 export interface NetworkInfo {
@@ -155,6 +156,33 @@ export async function executeSignedTransaction(
     return data.success ? { status: data.status, transactionId: data.transactionId } : { status: 'FAILED', transactionId: '' };
   } catch (error: any) {
     console.error('Error executing signed transaction:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch token details from mirror node to get decimals
+ */
+export async function getTokenDetails(tokenId: string): Promise<{ decimals: number }> {
+  try {
+    const url = `${MIRROR_NODE_URL}/api/v1/tokens/${tokenId}`;
+    console.log(`Fetching token details from: ${url}`);
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Mirror node error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Token details:', data);
+    
+    // Return the decimals value
+    return {
+      decimals: data.decimals || 0
+    };
+  } catch (error) {
+    console.error('Error fetching token details:', error);
     throw error;
   }
 }

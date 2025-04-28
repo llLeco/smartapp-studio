@@ -16,7 +16,6 @@ const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
 }) => {
   const [projectName, setProjectName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { accountId } = useWallet();
 
   useEffect(() => {
     // Reset form fields when modal opens

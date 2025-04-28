@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useWallet } from '../hooks/useWallet';
 import { Transaction } from '@hashgraph/sdk';
-import { createPaymentTransaction, getTokenDetails, getUserLicense } from '../services/licenseService';
-import { executeSignedTransaction } from '@/services/hederaService';
+import { createPaymentTransaction, getUserLicense } from '../services/licenseService';
+import { executeSignedTransaction, getTokenDetails } from '@/services/hederaService';
 
 // Configure backend URL base
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
@@ -13,11 +13,6 @@ interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (transactionId: string) => void;
-  paymentData: {
-    tokenId: string; //HSUITE Token ID
-    receiverAccountId: string; //Operator ID
-  };
-  license: any;
   isRenewal?: boolean;
 }
 
@@ -25,28 +20,20 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
-  paymentData,
-  license,
   isRenewal = false
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
   const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [displayAmount, setDisplayAmount] = useState<string>('...');
   const [tokenDecimals, setTokenDecimals] = useState<number | null>(null);
-  const [isLoadingTokenDetails, setIsLoadingTokenDetails] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [shouldPrepareTransaction, setShouldPrepareTransaction] = useState(false);
-  const [operatorId, setOperatorId] = useState<string | null>(null);
-  const [isLoadingOperatorId, setIsLoadingOperatorId] = useState(false);
-  const { accountId, signTransaction } = useWallet();
-  const [modalRoot, setModalRoot] = useState<HTMLElement | null>(null);
-  const transactionPrepared = useRef(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [subscriptionDetails, setSubscriptionDetails] = useState<{ subscriptionId: string; expiresAt: string } | null>(null);
+  const { accountId, signTransaction, isConnected } = useWallet();
+  const [modalRoot, setModalRoot] = useState<HTMLElement | null>(null);
   const isSubmitting = useRef(false);
   const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [license, setLicense] = useState<any>(null);
   
   // Subscription price in USD - from environment variable 
   const subscriptionPriceUSD = parseInt(process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE || "20", 10);
@@ -64,148 +51,70 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     }
   }, []);
   
-  // Fetch token details once when the modal opens
-  useEffect(() => {
-    if (isOpen && paymentData.tokenId && tokenDecimals === null && !isLoadingTokenDetails) {
-        const fetchDetails = async () => {
-        try {
-            setIsLoadingTokenDetails(true);
-            console.log('Fetching token details for:', paymentData.tokenId);
-            const details = await getTokenDetails(paymentData.tokenId);
-            setTokenDecimals(details.decimals);
-            setDisplayAmount(formatAmount(hsuiteAmount, details.decimals));
-            console.log('Token details fetched, decimals:', details.decimals);
-        } catch (err) {
-            console.error('Error fetching token details:', err);
-            setDisplayAmount(hsuiteAmount.toString());
-        } finally {
-            setIsLoadingTokenDetails(false);
-        }
-        };
-        
-        fetchDetails();
-    }
-  }, [isOpen, paymentData.tokenId, tokenDecimals, isLoadingTokenDetails, hsuiteAmount]);
-  
-  //TODO: Is this needed?
-  useEffect(() => {
-    if (isOpen && !operatorId && !isLoadingOperatorId) {
-        setOperatorId(paymentData.receiverAccountId);
-    }
-  }, [isOpen, operatorId, isLoadingOperatorId]);
-  
-  // Reset when modal opens
+  // Initialize token details and prepare transaction when modal opens
   useEffect(() => {
     if (isOpen) {
-      setTransaction(null);
-      setError(null);
-      setIsSuccess(false);
-      setSubscriptionDetails(null);
-      setRetryCount(0);
-      transactionPrepared.current = false;
-      setShouldPrepareTransaction(true);
-      isSubmitting.current = false;
-    } else {
-      // Reset when modal closes
-      transactionPrepared.current = false;
+      const initialize = async () => {
+        try {
+          // Reset states
+          setTransaction(null);
+          setError(null);
+          setIsSuccess(false);
+          setSubscriptionDetails(null);
+          isSubmitting.current = false;
+
+          if (!accountId) {
+            throw new Error('Account ID is required');
+          }
+
+          const license = await getUserLicense(accountId);
+          setLicense(license);
+
+          const networkRes = await fetch(api('/api/hedera/network'));
+          const networkData = await networkRes.json();
+
+          console.log('Network data:', networkData, license, accountId);
+
+          if (!networkData.success || !networkData.hsuiteTokenId) {
+            throw new Error('HSUITE Token ID not available');
+          }
+
+          // Fetch token details if needed
+          if (!tokenDecimals && networkData.hsuiteTokenId) {
+            const details = await getTokenDetails(networkData.hsuiteTokenId);
+            setTokenDecimals(details.decimals);
+            setDisplayAmount(formatAmount(hsuiteAmount, details.decimals));
+          }
+          
+          // Prepare transaction if we have all required data
+          if (accountId && networkData.operatorId && networkData.hsuiteTokenId && tokenDecimals !== null) {
+            const multiplier = Math.pow(10, tokenDecimals);
+            const transactionAmount = hsuiteAmount * multiplier;
+            
+            const tx = await createPaymentTransaction(
+              networkData.hsuiteTokenId,
+              transactionAmount,
+              accountId,
+              networkData.operatorId
+            );
+            
+            setTransaction(tx);
+          }
+        } catch (err: any) {
+          console.error('Error initializing modal:', err);
+          setError(err.message || 'Failed to initialize payment');
+        }
+      };
+      
+      initialize();
     }
-  }, [isOpen]);
-  
-  // Effect to prepare transaction when needed
-  useEffect(() => {
-    // Only prepare transaction when we have the operator ID and account ID
-    if (shouldPrepareTransaction && accountId && operatorId && !isCreatingTransaction && !transactionPrepared.current) {
-      console.log('Preparing transaction for account:', accountId);
-      prepareTransaction();
-      setShouldPrepareTransaction(false);
-    }
-  }, [shouldPrepareTransaction, accountId, operatorId, isCreatingTransaction]);
-  
-  // Effect to retry transaction creation
-  useEffect(() => {
-    if (retryCount > 0 && retryCount <= 3 && !transactionPrepared.current) {
-      setShouldPrepareTransaction(true);
-    }
-  }, [retryCount]);
+  }, [isOpen, accountId, tokenDecimals, hsuiteAmount]);
   
   // Format amount with proper decimals
   const formatAmount = (amount: number, decimals: number): string => {
     if (decimals === 0) return amount.toString();
-    
-    // For display purposes only
     const amountWithCommas = amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return amountWithCommas;
-  };
-  
-  const prepareTransaction = async () => {
-    if (!accountId) {
-      setError('Wallet not connected');
-      return;
-    }
-    
-    if (!operatorId) {
-      setError('Receiver account not available');
-      return;
-    }
-    
-    try {
-      console.log('Creating transaction...');
-      setIsCreatingTransaction(true);
-      setError(null);
-      
-      // Calculate the proper transaction amount based on token decimals
-      let transactionAmount = hsuiteAmount;
-      
-      if (paymentData.tokenId) {
-        console.log('Preparing HSUITE token transaction');
-        // Fetch token details if not already done
-        if (tokenDecimals === null) {
-          console.log('No token decimals available, fetching...');
-          return;
-        //   try {
-        //     const details = await getTokenDetails(paymentData.tokenId);
-        //     console.log('Token details fetched:', details);
-        //     setTokenDecimals(details.decimals);
-        //     // Calculate with proper scaling factor (multiply by 10^decimals)
-        //     const multiplier = Math.pow(10, details.decimals);
-        //     transactionAmount = hsuiteAmount * multiplier;
-        //   } catch (error) {
-        //     console.error('Error fetching token details:', error);
-        //     // Use default scaling if we couldn't get token details
-        //     transactionAmount = hsuiteAmount * 100000;
-        //   }
-        } else {
-          // Already have decimals info, use it directly
-          const multiplier = Math.pow(10, tokenDecimals);
-          transactionAmount = hsuiteAmount * multiplier;
-        }
-      } else return;
-      
-      // Create the transaction
-      const tx = await createPaymentTransaction(
-        paymentData.tokenId,
-        transactionAmount,
-        accountId,
-        operatorId
-      );
-      
-      console.log('Transaction created successfully');
-      setTransaction(tx);
-      transactionPrepared.current = true;
-    } catch (err: any) {
-      console.error('Error creating transaction:', err);
-      setError(err.message || 'Failed to create transaction');
-      
-      // Retry logic - only retry up to 3 times
-      if (retryCount < 3) {
-        console.log(`Retrying transaction creation (attempt ${retryCount + 1})`);
-        setTimeout(() => {
-          setRetryCount(prev => prev + 1);
-        }, 1000); // Wait 1 second before retry
-      }
-    } finally {
-      setIsCreatingTransaction(false);
-    }
   };
   
   const handleConfirm = async () => {
@@ -219,11 +128,8 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       setError(null);
       
       const signedTransaction = await signTransaction(transaction);
-
-      // Convert transaction to base64 for sending to the backend
       const signedTransactionBytes = Buffer.from(signedTransaction.toBytes()).toString('base64');
       
-      // Submit the signed transaction to execute the payment
       const response = await executeSignedTransaction(signedTransactionBytes);
       console.log('Payment execution response:', response);
       
@@ -236,7 +142,6 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         throw new Error('No transaction ID returned from backend');
       }
       
-      // Prepare subscription details
       const subscriptionDetails = {
         periodMonths: 1,
         projectLimit: 3,
@@ -245,8 +150,6 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         priceHSuite: hsuiteAmount
       };
       
-      
-      // Submit subscription data
       const subscriptionResponse = await fetch('/api/subscription?action=record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -263,7 +166,6 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         throw new Error(subscriptionResult.error || 'Failed to record subscription');
       }
       
-      // Update UI state
       setSubscriptionDetails({
         subscriptionId: subscriptionResult.subscriptionId,
         expiresAt: subscriptionResult.expiresAt
@@ -271,8 +173,6 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
       setIsSuccess(true);
       setIsProcessing(false);
-      
-      // Store the transaction ID for later use
       setTransactionId(transactionId);
       
     } catch (err: any) {
@@ -483,12 +383,12 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/30' 
                       : 'bg-gray-700'
                   } text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 ${
-                    isProcessing || !transaction || isCreatingTransaction || isLoadingOperatorId
+                    isProcessing || !transaction
                       ? 'opacity-50 cursor-not-allowed' 
                       : 'transform transition-transform hover:-translate-y-0.5'
                   }`}
                   onClick={handleConfirm}
-                  disabled={isProcessing || !transaction || isCreatingTransaction || isLoadingOperatorId}
+                  disabled={isProcessing || !transaction}
                 >
                   {isProcessing ? (
                     <span className="flex items-center">
@@ -497,22 +397,6 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                       Processing...
-                    </span>
-                  ) : isCreatingTransaction ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Preparing...
-                    </span>
-                  ) : isLoadingOperatorId ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Initializing...
                     </span>
                   ) : (
                     isRenewal ? 'Renew Now' : 'Confirm Payment'

@@ -333,11 +333,6 @@ export default function Home() {
           setIsProcessing(false);
         }}
         onConfirm={handlePaymentConfirm}
-        paymentData={{
-          tokenId: tokenId,
-          receiverAccountId: receiverAccountId || '0.0.1234567'
-        }}
-        license={null}
       />
 
       <BottomNavBar />

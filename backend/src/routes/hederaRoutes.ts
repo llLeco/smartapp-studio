@@ -8,7 +8,6 @@ import {
   getLicenseCollectionId, 
   getMirrorNodeUrl, 
   getHsuiteTokenId,
-  getLicenseTokenId
 } from '../services/hederaService';
 
 const router = express.Router();
@@ -120,12 +119,15 @@ router.get('/network', async (req: Request, res: Response) => {
     
     // Get license collection ID
     const licenseCollectionId = getLicenseCollectionId();
-    
+
+    const hsuiteTokenId = getHsuiteTokenId();
+
     return res.status(200).json({ 
       success: true, 
       mirrorNodeUrl,
       operatorId,
       licenseCollectionId,
+      hsuiteTokenId,
       network: process.env.HEDERA_NETWORK || 'testnet'
     });
   } catch (error: any) {
@@ -157,7 +159,7 @@ router.get('/hsuitetokenid', async (req: Request, res: Response) => {
 
 router.get('/licenseTokenId', async (req: Request, res: Response) => {
   try {
-    const tokenId = getLicenseTokenId();
+    const tokenId = getLicenseCollectionId();
     return res.status(200).json({ success: true, tokenId });
   } catch (error: any) {
     console.error('Error getting license token ID:', error);

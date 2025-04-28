@@ -153,11 +153,6 @@ const SubscriptionBanner: React.FC<SubscriptionBannerProps> = ({
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           onConfirm={handleConfirmPayment}
-          paymentData={{
-            tokenId: selectedTokenId,
-            receiverAccountId: receiverAccountId
-          }}
-          license={subscription}
         />
       )}
     </div>

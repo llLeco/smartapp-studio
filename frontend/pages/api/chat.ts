@@ -3,7 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'POST') {
     try {
-      const { message, topicId } = req.body;
+      const { message, topicId, usageQuota } = req.body;
       
       if (!message) {
         return res.status(400).json({ error: 'Message is required' });
@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message, topicId }),
+        body: JSON.stringify({ message, topicId, usageQuota }),
       });
       
       if (!response.ok) {
