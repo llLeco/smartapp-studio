@@ -1,4 +1,3 @@
-
 # SmartApp Studio
 
 ## Overview
@@ -143,5 +142,31 @@ npm run test
 ## 📜 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Monorepo Structure
+
+This project is organized as a monorepo using npm workspaces to manage multiple packages:
+
+```
+smartapp-studio/
+├── frontend/   # Next.js frontend application
+├── backend/    # Express.js backend API
+```
+
+### Development
+
+```bash
+# Install all dependencies
+npm install
+
+# Run both frontend and backend
+npm run dev
+
+# Run only frontend
+npm run dev:frontend
+
+# Run only backend
+npm run dev:backend
+```
 
 ---

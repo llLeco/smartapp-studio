@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: smartapp-studio-backend
+    env: node
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: HEDERA_NETWORK
+        value: testnet
+      - key: HSUITE_TOKEN_ID
+        value: 0.0.2203022
+      - key: NODE_ENV
+        value: production
+      - fromGroup: hedera-credentials
+      - key: OPENAI_API_KEY
+        sync: false
+    autoDeploy: true
+    plan: starter 
