@@ -62,6 +62,8 @@ out
 # Export
 *.zip
 *.json
+!package.json
+!**/package.json
 *.md
 
 # Uploads
