@@ -33,6 +33,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         case 'hsuitetokenid':
           endpoint = `${backendUrl}/api/hedera/hsuitetokenid`;
           break;
+        case 'licensetokenid':
+          endpoint = `${backendUrl}/api/hedera/licensetokenid`;
+          break;
         default:
           return res.status(400).json({ error: 'Invalid request type' });
       }

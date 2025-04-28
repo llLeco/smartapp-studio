@@ -7,7 +7,8 @@ import {
   getOperatorId, 
   getLicenseCollectionId, 
   getMirrorNodeUrl, 
-  getHsuiteTokenId
+  getHsuiteTokenId,
+  getLicenseTokenId
 } from '../services/hederaService';
 
 const router = express.Router();
@@ -153,6 +154,20 @@ router.get('/hsuitetokenid', async (req: Request, res: Response) => {
     });
   }
 });
+
+router.get('/licenseTokenId', async (req: Request, res: Response) => {
+  try {
+    const tokenId = getLicenseTokenId();
+    return res.status(200).json({ success: true, tokenId });
+  } catch (error: any) {
+    console.error('Error getting license token ID:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to get license token ID' 
+    });
+  }
+});
+
 
 
 export default router; 

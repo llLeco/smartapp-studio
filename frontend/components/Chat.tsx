@@ -185,34 +185,46 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
 
         console.log("🔍 Sorted messages:", sortedMessages);
         
-        // Get the last message for usage quota
-        let quotaFound = false;
-        if (sortedMessages.length > 0) {
-          const lastMessage = sortedMessages[sortedMessages.length - 1];
-          console.log("🔍 Last message:", lastMessage);
-          console.log("🔍 Last message usageQuota:", lastMessage.usageQuota);
+        // Get the most recent quota from any message type
+        // Check if any message has a quota update (priority is given to any message with quota, starting from the most recent)
+        let foundQuota = false;
+        let mostRecentQuota = 0;
+        
+        // First scan for quota updates in reverse order (newest first)
+        for (let i = sortedMessages.length - 1; i >= 0 && !foundQuota; i--) {
+          const msg = sortedMessages[i];
+          console.log(`🔍 Checking message ${i} for quota:`, msg.id, msg.usageQuota);
           
-          if (lastMessage.usageQuota !== undefined) {
-            setCurrentUsageQuota(lastMessage.usageQuota);
-            quotaFound = true;
-            console.log(`🔍 Current usage quota set from last message: ${lastMessage.usageQuota}`);
-          } else {
-            console.log("🔍 No usage quota found in the last message");
+          if (msg.usageQuota !== undefined) {
+            console.log(`🔍 Found quota in message ${msg.id}: ${msg.usageQuota}`);
+            mostRecentQuota = msg.usageQuota;
+            foundQuota = true;
             
-            // If we don't find a usageQuota field, we need to check if this is a new topic
-            if (sortedMessages.length <= 2) {
-              // This might be a new topic - we should check with backend about initializing quota
-              console.log("🔍 This appears to be a new topic, may need initial quota");
+            // If this is a quota update message (has quota-prefix), we might want to filter it out from display
+            if (msg.id.startsWith('quota-')) {
+              console.log(`🔍 Message ${msg.id} is a quota update message`);
             }
           }
         }
         
-        if (!quotaFound) {
-          console.log("No valid usage quota found in any messages");
+        if (foundQuota) {
+          setCurrentUsageQuota(mostRecentQuota);
+          console.log(`🔍 Found and set current usage quota: ${mostRecentQuota}`);
+        } else if (sortedMessages.length <= 2) {
+          // This might be a new topic - we should check with backend about initializing quota
+          console.log("🔍 This appears to be a new topic, may need initial quota");
+          // Default to 10 messages as in the backend logic for new topics
+          setCurrentUsageQuota(10);
+        } else {
+          console.log("🔍 No valid usage quota found in any messages");
+          setCurrentUsageQuota(0);
         }
         
+        // Filter out quota-only messages before displaying
+        const displayMessages = sortedMessages.filter(msg => !msg.id.toString().startsWith('quota-'));
+        
         // Convert each topic message to two chat messages (user and assistant)
-        sortedMessages.forEach((msg: TopicMessage, index: number) => {
+        displayMessages.forEach((msg: TopicMessage, index: number) => {
           // Add user message with unique index to prevent duplicate keys
           chatMessages.push({
             id: `user-${msg.id}-${index}`,
@@ -500,8 +512,9 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       // Save assistant message
       await saveMessageToTopic(assistantMessage);
       
-      // Update usage quota
+      // Update usage quota locally (backend already decrements it in the topic)
       setCurrentUsageQuota(prev => Math.max(0, prev - 1));
+      console.log("🔄 Updated local quota:", currentUsageQuota - 1);
       
       // Process new message for useful content
       console.log("🔄 Processing assistant response for useful content");
@@ -579,8 +592,12 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
     console.log(`Payment confirmed! Transaction ID: ${transactionId}, Message count: ${messageCount}`);
 
     try {
+      if (!topicId) {
+        throw new Error('Topic ID is required to update quota');
+      }
+
       // Send transaction details to backend to update quota
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/quota', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -588,23 +605,27 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         body: JSON.stringify({
           topicId,
           transactionId,
-          messageCount
+          messageCount: parseInt(messageCount.toString(), 10) // Ensure it's a number
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update quota');
+        const errorData = await response.json();
+        console.error('Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to update quota');
       }
 
       const data = await response.json();
       console.log('Quota updated successfully:', data);
       
-      // Update local quota state
+      // Update local quota state with new quota from response
       if (data.newQuota !== undefined) {
         setCurrentUsageQuota(data.newQuota);
+        console.log(`Updated quota to ${data.newQuota}`);
       } else {
         // If no specific quota returned, add the message count to current quota
         setCurrentUsageQuota(prev => prev + messageCount);
+        console.log(`Updated quota by adding ${messageCount}`);
       }
     } catch (error) {
       console.error('Error updating quota:', error);

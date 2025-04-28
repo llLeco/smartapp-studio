@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { TopicId, TopicMessageSubmitTransaction, PrivateKey } from "@hashgraph/sdk";
 import { Client } from "@hashgraph/sdk";
 import { getTopicMessages } from "./topicService";
+import { getMirrorNodeUrl } from './hederaService';
 
 dotenv.config();
 
@@ -76,187 +77,82 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
  */
 export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
   try {
-    // Set up client directly (similar to getClient implementation)
-    const network = process.env.HEDERA_NETWORK || 'testnet';
-    
-    // Mirror Node base URL
-    const MIRROR_NODE_BASE_URL = {
-      mainnet: "https://mainnet-public.mirrornode.hedera.com",
-      testnet: "https://testnet.mirrornode.hedera.com",
-      previewnet: "https://previewnet.mirrornode.hedera.com"
-    };
-    
-    // Get appropriate base URL for current network
-    const baseUrl = MIRROR_NODE_BASE_URL[network as keyof typeof MIRROR_NODE_BASE_URL] || MIRROR_NODE_BASE_URL.testnet;
-    
-    console.log(`Retrieving chat messages for topic ${topicId}`);
-    
     // Query the Mirror Node for topic messages
-    const url = `${baseUrl}/api/v1/topics/${topicId}/messages?limit=100&encoding=base64&order=asc`;
-    console.log(`Querying Mirror Node at: ${url}`);
-    
+    const url = `${getMirrorNodeUrl()}/api/v1/topics/${topicId}/messages?limit=100`;
     const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Mirror node error ${response.status}: ${await response.text()}`);
-    }
-    
     const data = await response.json();
+
     console.log(`Retrieved ${data.messages?.length || 0} total messages from topic`);
-    
+
     // Process and filter messages - only returning CHAT_TOPIC types
     const chatMessages: ChatMessage[] = [];
     
     // Store chunked messages for reassembly
-    const messageChunks: { [key: string]: { chunks: string[], timestamps: string[] } } = {};
+    const messageChunks: { [key: string]: { chunks: string[], timestamp: string } } = {};
     
     // First pass: identify and group message chunks
-    for (const msg of data.messages || []) {
-      try {
-        // Check if message has chunk_info
-        if (msg.chunk_info) {
-          const chunkInfo = msg.chunk_info;
-          const initialTxId = chunkInfo.initial_transaction_id?.account_id || 'unknown';
-          const chunkKey = `${initialTxId}-${chunkInfo.total}`;
-          
-          if (!messageChunks[chunkKey]) {
-            messageChunks[chunkKey] = {
-              chunks: new Array(chunkInfo.total).fill(''),
-              timestamps: new Array(chunkInfo.total).fill('')
-            };
-          }
-          
-          // Store this chunk in the appropriate position (0-indexed array)
-          messageChunks[chunkKey].chunks[chunkInfo.number - 1] = msg.message;
-          messageChunks[chunkKey].timestamps[chunkInfo.number - 1] = msg.consensus_timestamp;
-          console.log(`Found chunk ${chunkInfo.number}/${chunkInfo.total} for transaction ${chunkKey}`);
-        } else {
-          // Process non-chunked messages directly
-          processMessage(msg.message, msg.sequence_number, msg.consensus_timestamp);
-        }
-      } catch (e) {
-        console.warn('Error processing message or chunk:', e);
-      }
-    }
-    
-    // Second pass: reassemble and process chunked messages
-    for (const [key, messageData] of Object.entries(messageChunks)) {
-      try {
-        // Check if we have all chunks
-        if (!messageData.chunks.includes('')) {
-          // First decode each chunk from base64 to string
-          const decodedChunks = messageData.chunks.map(chunk => 
-            Buffer.from(chunk, 'base64').toString()
-          );
-          
-          // Combine all decoded chunks
-          const combinedMessage = decodedChunks.join('');
-          
-          // Get the latest timestamp from the chunks
-          const latestTimestamp = messageData.timestamps.reduce((latest, current) => 
-            current > latest ? current : latest, ''
-          );
-          
-          console.log(`Reassembled message (first 50 chars): ${combinedMessage.substring(0, 50)}`);
-          
-          // Now try to parse the combined message
-          try {
-            const content = JSON.parse(combinedMessage);
-            
-            // Check if this is a chat message
-            if (content && content.type === 'CHAT_TOPIC' && content.question) {
-              console.log(`Message usageQuota from chunks: ${content.usageQuota !== undefined ? content.usageQuota : 'undefined'}`);
-              chatMessages.push({
-                id: (parseInt(key.split('-')[0].split('.')[2]) || chatMessages.length + 1).toString(),
-                question: content.question,
-                answer: content.answer || "No answer available",
-                timestamp: content.timestamp || latestTimestamp,
-                usageQuota: content.usageQuota
-              });
-              console.log(`Added chat message from chunks: ${content.question.substring(0, 30)}...`);
-            }
-          } catch (parseError: any) {
-            console.log(`Failed to parse reassembled message: ${parseError.message}`);
-            
-            // Try to extract JSON using regex if it contains our marker
-            if (combinedMessage.includes('"type":"CHAT_TOPIC"')) {
-              try {
-                // Look for complete JSON object containing our type
-                const match = combinedMessage.match(/\{[^]*"type":"CHAT_TOPIC"[^]*\}/);
-                if (match) {
-                  const extractedJson = match[0];
-                  // Try to fix common JSON issues
-                  const fixedJson = extractedJson
-                    .replace(/\n/g, '\\n')
-                    .replace(/\r/g, '\\r')
-                    .replace(/\t/g, '\\t')
-                    .replace(/\\"/g, '\\"')
-                    .replace(/"/g, '"')
-                    .replace(/'/g, "'");
-                  
-                  try {
-                    const content = JSON.parse(fixedJson);
-                    if (content && content.type === 'CHAT_TOPIC' && content.question) {
-                      console.log(`Message usageQuota from regex extraction: ${content.usageQuota !== undefined ? content.usageQuota : 'undefined'}`);
-                      chatMessages.push({
-                        id: (parseInt(key.split('-')[0].split('.')[2]) || chatMessages.length + 1).toString(),
-                        question: content.question,
-                        answer: content.answer || "No answer available",
-                        timestamp: content.timestamp || latestTimestamp,
-                        usageQuota: content.usageQuota
-                      });
-                      console.log(`Added chat message using regex extraction: ${content.question.substring(0, 30)}...`);
-                    }
-                  } catch (e) {
-                    console.log("Failed to parse extracted JSON:", e);
-                  }
-                }
-              } catch (e) {
-                console.log("Failed to extract JSON with regex:", e);
-              }
-            }
-          }
-        } else {
-          console.log(`Incomplete chunks for message ${key}, missing some parts`);
-        }
-      } catch (e) {
-        console.warn(`Error reassembling chunked message ${key}:`, e);
-      }
-    }
-    
-    function processMessage(base64Message: string, sequenceNumber: number, timestamp: string) {
-      try {
-        // Decode message from base64
-        const decodedMessage = Buffer.from(base64Message, 'base64').toString();
-        console.log(`Processing message (first 50 chars): ${decodedMessage.substring(0, 50)}`);
-        
-        // Try to parse as JSON
-        let content;
+    if (data.messages && data.messages.length > 0) {
+      // Sort messages by sequence number to ensure proper ordering
+      const sortedMessages = [...data.messages].sort((a, b) => 
+        parseInt(a.sequence_number) - parseInt(b.sequence_number)
+      );
+      
+      for (const msg of sortedMessages) {
         try {
-          content = JSON.parse(decodedMessage);
-        } catch (parseError: any) {
-          console.log(`JSON parsing failed: ${parseError.message}`);
-          return; // Skip if we couldn't parse JSON
+          // Handle chunked messages
+          if (msg.chunk_info) {
+            const chunkInfo = msg.chunk_info;
+            // Create a unique key for each chunked message
+            const initialTxId = chunkInfo.initial_transaction_id?.transaction_valid_start || 'unknown';
+            const chunkKey = `${initialTxId}`;
+            
+            if (!messageChunks[chunkKey]) {
+              messageChunks[chunkKey] = {
+                chunks: new Array(chunkInfo.total).fill(''),
+                timestamp: msg.consensus_timestamp
+              };
+            } else if (msg.consensus_timestamp > messageChunks[chunkKey].timestamp) {
+              // Use the latest timestamp for the message
+              messageChunks[chunkKey].timestamp = msg.consensus_timestamp;
+            }
+            
+            // Store this chunk in the appropriate position (0-indexed array)
+            messageChunks[chunkKey].chunks[chunkInfo.number - 1] = msg.message;
+          } else {
+            // Process non-chunked messages directly
+            const messageContent = processMessage(msg.message, msg.sequence_number, msg.consensus_timestamp);
+            if (messageContent) {
+              chatMessages.push(messageContent);
+            }
+          }
+        } catch (e) {
+          console.warn('Error processing message or chunk:', e);
         }
-        
-        // Check if this is a chat message
-        if (content && content.type === 'CHAT_TOPIC' && content.question) {
-          console.log(`Message usageQuota from direct message: ${content.usageQuota !== undefined ? content.usageQuota : 'undefined'}`);
-          chatMessages.push({
-            id: sequenceNumber.toString(),
-            question: content.question,
-            answer: content.answer || "No answer available",
-            timestamp: content.timestamp || timestamp,
-            usageQuota: content.usageQuota
-          });
-          console.log(`Added chat message: ${content.question.substring(0, 30)}...`);
+      }
+      
+      // Second pass: reassemble and process chunked messages
+      for (const [key, messageData] of Object.entries(messageChunks)) {
+        // Check if we have all chunks before processing
+        if (!messageData.chunks.includes('')) {
+          const messageContent = processReassembledMessage(
+            messageData.chunks,
+            key,
+            messageData.timestamp
+          );
+          
+          if (messageContent) {
+            chatMessages.push(messageContent);
+          }
         }
-      } catch (e) {
-        console.warn('Failed to process message content:', e);
       }
     }
     
-    console.log(`Filtered to ${chatMessages.length} chat messages from topic ${topicId}`);
+    // Sort messages by timestamp
+    chatMessages.sort((a, b) => {
+      return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    });
+    
+    console.log(`Processed ${chatMessages.length} chat messages from topic ${topicId}`);
     
     // Log quota from last message if available
     if (chatMessages.length > 0) {
@@ -270,6 +166,82 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
     console.error('Error retrieving chat messages:', error);
     throw error;
   }
+}
+
+/**
+ * Process a single non-chunked message
+ */
+function processMessage(base64Message: string, sequenceNumber: number, timestamp: string): ChatMessage | null {
+  try {
+    // Decode message from base64
+    const decodedMessage = Buffer.from(base64Message, 'base64').toString();
+    
+    // Try to parse as JSON
+    const content = JSON.parse(decodedMessage);
+    
+    // Check if this is a chat message
+    if (content && content.type === 'CHAT_TOPIC' && content.question) {
+      return {
+        id: sequenceNumber.toString(),
+        question: content.question,
+        answer: content.answer || "No answer available",
+        timestamp: content.timestamp || timestamp,
+        usageQuota: content.usageQuota
+      };
+    }
+    // Check if this is a quota update message
+    else if (content && content.type === 'CHAT_TOPIC_QUOTA_UPDATE' && content.usageQuota !== undefined) {
+      return {
+        id: `quota-${sequenceNumber.toString()}`,
+        question: "Quota updated",
+        answer: `Your message quota has been updated to ${content.usageQuota}`,
+        timestamp: content.timestamp || timestamp,
+        usageQuota: content.usageQuota
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to process message content:', e);
+  }
+  return null;
+}
+
+/**
+ * Process reassembled chunks into a message
+ */
+function processReassembledMessage(chunks: string[], key: string, timestamp: string): ChatMessage | null {
+  try {
+    // Decode and combine all chunks
+    const combinedMessage = chunks
+      .map(chunk => Buffer.from(chunk, 'base64').toString())
+      .join('');
+    
+    // Try to parse the JSON
+    const content = JSON.parse(combinedMessage);
+    
+    // Check if this is a chat message
+    if (content && content.type === 'CHAT_TOPIC' && content.question) {
+      return {
+        id: key,
+        question: content.question,
+        answer: content.answer || "No answer available",
+        timestamp: content.timestamp || timestamp,
+        usageQuota: content.usageQuota
+      };
+    }
+    // Check if this is a quota update message
+    else if (content && content.type === 'CHAT_TOPIC_QUOTA_UPDATE' && content.usageQuota !== undefined) {
+      return {
+        id: `quota-${key}`,
+        question: "Quota updated",
+        answer: `Your message quota has been updated to ${content.usageQuota}`,
+        timestamp: content.timestamp || timestamp,
+        usageQuota: content.usageQuota
+      };
+    }
+  } catch (e) {
+    console.warn(`Failed to process reassembled message: ${e}`);
+  }
+  return null;
 }
 
 /**

@@ -98,4 +98,49 @@ router.post('/updateQuota', async (req: Request, res: Response) => {
   }
 });
 
+// New route to update quota based on transaction ID and message count
+router.patch('/quota', async (req: Request, res: Response) => {
+  try {
+    const { topicId, transactionId, messageCount } = req.body;
+    
+    if (!topicId || !transactionId || !messageCount) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Topic ID, transaction ID, and message count are required' 
+      });
+    }
+    
+    console.log(`Updating quota for topic ${topicId} based on transaction ${transactionId} with ${messageCount} messages`);
+    
+    // Verify the transaction first (could expand this functionality)
+    // For now, we'll just update the quota directly
+    
+    // Get current messages to check current quota
+    const messages = await getChatMessages(topicId);
+    const currentQuota = messages.length > 0 && messages[messages.length - 1].usageQuota !== undefined 
+      ? messages[messages.length - 1].usageQuota 
+      : 0;
+    
+    // Calculate new quota by adding the purchased message count
+    const newQuota = currentQuota + messageCount;
+    
+    // Update the usage quota for the topic
+    await updateUsageQuota(topicId, newQuota);
+    
+    return res.status(200).json({ 
+      success: true, 
+      transactionId,
+      previousQuota: currentQuota,
+      newQuota,
+      addedQuota: messageCount
+    });
+  } catch (error: any) {
+    console.error('Error updating quota with transaction:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to update quota' 
+    });
+  }
+});
+
 export default router; 
