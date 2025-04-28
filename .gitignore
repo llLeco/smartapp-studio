@@ -64,3 +64,6 @@ out
 *.json
 *.md
 
+# Uploads
+/uploads
+

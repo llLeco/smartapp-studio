@@ -4,12 +4,12 @@ import { TopicId, TopicMessageSubmitTransaction, PrivateKey } from "@hashgraph/s
 import { Client } from "@hashgraph/sdk";
 import { getTopicMessages } from "./topicService";
 import { getMirrorNodeUrl } from './hederaService';
+import { KnowledgeBaseService } from './knowledgeBaseService';
 
 dotenv.config();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const knowledgeBase = new KnowledgeBaseService();
 
 /**
  * Interface for chat messages retrieved from Hedera
@@ -42,11 +42,41 @@ export interface SubscriptionDetails {
  */
 export async function askAssistant(prompt: string, topicId: string, usageQuota: number): Promise<any> {
   try {
+    const context = await knowledgeBase.getRelevantContext(prompt);
+
     const completion = await openai.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: "You are an AI assistant that helps developers create SmartApps using HbarSuite and SmartNodes technology without smart contracts. You can generate app structure, NFT schemas, and base code. Regularly reference the official documentation at https://docs.hsuite.finance/ and include relevant links and excerpts when providing guidance. Use specific components and features from the documentation to ensure accuracy and alignment with HbarSuite best practices. IMPORTANT: Always format your entire response using proper Markdown (*.md) formatting. Use markdown for all text formatting, code blocks, lists, tables, and links. For code, always use triple backticks with the appropriate language specified."
+          content: `
+          You are a professional AI assistant specialized in helping developers build SmartApps using HbarSuite and SmartNodes technology — without traditional smart contracts.
+
+          Always act as a co-pilot: your goal is to guide, scaffold, and accelerate development.
+
+          Use these principles:
+
+          - Prioritize direct, actionable, and practical answers.
+          - When a prompt is vague, ask quick clarifying questions before proceeding.
+          - Always suggest next actions or improvements after giving an answer.
+          - If relevant, propose small architecture/design tips to improve the project.
+          - Use and reference official documentation: https://docs.hsuite.finance/
+          - When necessary, directly cite or embed snippets from the repository context provided below.
+          - Keep a motivating, professional tone — you are a technical mentor and co-builder.
+          - Always structure your entire response using Markdown (*.md) format:
+          - Code blocks must use triple backticks and specify the language (e.g., \`\`\`typescript).
+          - Organize information with headers, lists, and tables when appropriate.
+
+          Repository Context:
+          ---
+          ${context}
+          ---
+
+          Be proactive: the goal is to help the developer not only "answer" but "build."
+
+          If appropriate, offer to scaffold file structures, NFT schemas, HCS topics, or initial components.
+
+          Focus on real code, clear examples, and practical advice.
+          `
         },
         {
           role: "user",
@@ -57,8 +87,7 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
     });
 
     const responseContent = completion.choices[0].message.content;
-    
-    // If topicId is provided, record the conversation to Hedera
+
     if (topicId) {
       await recordConversationToTopic(topicId, prompt, responseContent || "No response generated", usageQuota);
     }
@@ -69,6 +98,7 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
     throw new Error('Failed to get response from AI assistant');
   }
 }
+
 
 /**
  * Gets chat messages from a specified Hedera topic
@@ -86,17 +116,17 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
 
     // Process and filter messages - only returning CHAT_TOPIC types
     const chatMessages: ChatMessage[] = [];
-    
+
     // Store chunked messages for reassembly
     const messageChunks: { [key: string]: { chunks: string[], timestamp: string } } = {};
-    
+
     // First pass: identify and group message chunks
     if (data.messages && data.messages.length > 0) {
       // Sort messages by sequence number to ensure proper ordering
-      const sortedMessages = [...data.messages].sort((a, b) => 
+      const sortedMessages = [...data.messages].sort((a, b) =>
         parseInt(a.sequence_number) - parseInt(b.sequence_number)
       );
-      
+
       for (const msg of sortedMessages) {
         try {
           // Handle chunked messages
@@ -105,7 +135,7 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
             // Create a unique key for each chunked message
             const initialTxId = chunkInfo.initial_transaction_id?.transaction_valid_start || 'unknown';
             const chunkKey = `${initialTxId}`;
-            
+
             if (!messageChunks[chunkKey]) {
               messageChunks[chunkKey] = {
                 chunks: new Array(chunkInfo.total).fill(''),
@@ -115,7 +145,7 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
               // Use the latest timestamp for the message
               messageChunks[chunkKey].timestamp = msg.consensus_timestamp;
             }
-            
+
             // Store this chunk in the appropriate position (0-indexed array)
             messageChunks[chunkKey].chunks[chunkInfo.number - 1] = msg.message;
           } else {
@@ -129,7 +159,7 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
           console.warn('Error processing message or chunk:', e);
         }
       }
-      
+
       // Second pass: reassemble and process chunked messages
       for (const [key, messageData] of Object.entries(messageChunks)) {
         // Check if we have all chunks before processing
@@ -139,29 +169,29 @@ export async function getChatMessages(topicId: string): Promise<ChatMessage[]> {
             key,
             messageData.timestamp
           );
-          
+
           if (messageContent) {
             chatMessages.push(messageContent);
           }
         }
       }
     }
-    
+
     // Sort messages by timestamp
     chatMessages.sort((a, b) => {
       return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
     });
-    
+
     console.log(`Processed ${chatMessages.length} chat messages from topic ${topicId}`);
-    
+
     // Log quota from last message if available
     if (chatMessages.length > 0) {
       const lastMsg = chatMessages[chatMessages.length - 1];
       console.log(`Last message has usageQuota: ${lastMsg.usageQuota !== undefined ? lastMsg.usageQuota : 'undefined'}`);
     }
-    
+
     return chatMessages;
-    
+
   } catch (error) {
     console.error('Error retrieving chat messages:', error);
     throw error;
@@ -175,10 +205,10 @@ function processMessage(base64Message: string, sequenceNumber: number, timestamp
   try {
     // Decode message from base64
     const decodedMessage = Buffer.from(base64Message, 'base64').toString();
-    
+
     // Try to parse as JSON
     const content = JSON.parse(decodedMessage);
-    
+
     // Check if this is a chat message
     if (content && content.type === 'CHAT_TOPIC' && content.question) {
       return {
@@ -214,10 +244,10 @@ function processReassembledMessage(chunks: string[], key: string, timestamp: str
     const combinedMessage = chunks
       .map(chunk => Buffer.from(chunk, 'base64').toString())
       .join('');
-    
+
     // Try to parse the JSON
     const content = JSON.parse(combinedMessage);
-    
+
     // Check if this is a chat message
     if (content && content.type === 'CHAT_TOPIC' && content.question) {
       return {
@@ -269,13 +299,13 @@ export async function recordConversationToTopic(topicId: string, question: strin
     const network = process.env.HEDERA_NETWORK || 'testnet';
     const operatorId = process.env.HEDERA_OPERATOR_ID;
     const operatorKey = process.env.HEDERA_OPERATOR_KEY;
-    
+
     if (!operatorId || !operatorKey) {
       throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
     }
-    
+
     let client;
-    switch(network) {
+    switch (network) {
       case 'mainnet':
         client = Client.forMainnet();
         break;
@@ -285,10 +315,10 @@ export async function recordConversationToTopic(topicId: string, question: strin
       default:
         client = Client.forTestnet();
     }
-    
+
     // Non-null assertion is safe here because we've checked above
     client.setOperator(operatorId, operatorKey);
-    
+
     // Create message content
     const messageContent = {
       type: 'CHAT_TOPIC',
@@ -297,7 +327,7 @@ export async function recordConversationToTopic(topicId: string, question: strin
       timestamp: new Date().toISOString(),
       usageQuota: usageQuota - 1
     };
-    
+
     // Get operator private key - non-null assertion is safe here because we check above
     const privateKey = PrivateKey.fromString(operatorKey);
 
@@ -306,11 +336,11 @@ export async function recordConversationToTopic(topicId: string, question: strin
       .setTopicId(TopicId.fromString(topicId))
       .setMessage(Buffer.from(JSON.stringify(messageContent)))
       .freezeWith(client);
-    
+
     const signedTx = await transaction.sign(privateKey);
     const txResponse = await signedTx.execute(client);
     await txResponse.getReceipt(client);
-    
+
     console.log(`Recorded conversation to topic ${topicId}`);
   } catch (error) {
     console.error('Error recording conversation to topic:', error);
@@ -334,13 +364,13 @@ export async function updateUsageQuota(topicId: string, usageQuota: number): Pro
     const network = process.env.HEDERA_NETWORK || 'testnet';
     const operatorId = process.env.HEDERA_OPERATOR_ID;
     const operatorKey = process.env.HEDERA_OPERATOR_KEY;
-    
+
     if (!operatorId || !operatorKey) {
       throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
     }
-    
+
     let client;
-    switch(network) {
+    switch (network) {
       case 'mainnet':
         client = Client.forMainnet();
         break;
@@ -350,9 +380,9 @@ export async function updateUsageQuota(topicId: string, usageQuota: number): Pro
       default:
         client = Client.forTestnet();
     }
-    
+
     client.setOperator(operatorId, operatorKey);
-    
+
     // Create quota update message content
     const messageContent = {
       type: 'CHAT_TOPIC_QUOTA_UPDATE',
@@ -360,7 +390,7 @@ export async function updateUsageQuota(topicId: string, usageQuota: number): Pro
       usageQuota: usageQuota,
       message: 'Quota update transaction'
     };
-    
+
     // Get operator private key
     const privateKey = PrivateKey.fromString(operatorKey);
 
@@ -369,11 +399,11 @@ export async function updateUsageQuota(topicId: string, usageQuota: number): Pro
       .setTopicId(TopicId.fromString(topicId))
       .setMessage(Buffer.from(JSON.stringify(messageContent)))
       .freezeWith(client);
-    
+
     const signedTx = await transaction.sign(privateKey);
     const txResponse = await signedTx.execute(client);
     await txResponse.getReceipt(client);
-    
+
     console.log(`Updated usage quota for topic ${topicId} to ${usageQuota}`);
   } catch (error) {
     console.error('Error updating usage quota:', error);
