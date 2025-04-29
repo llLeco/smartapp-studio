@@ -75,7 +75,7 @@ export default function Sidebar({ generatedStructure, pinnedItems: propPinnedIte
             <path d="M12 6.25278V19.2528M12 6.25278C10.8321 5.47686 9.24649 5 7.5 5C5.75351 5 4.16789 5.47686 3 6.25278V19.2528C4.16789 18.4769 5.75351 18 7.5 18C9.24649 18 10.8321 18.4769 12 19.2528M12 6.25278C13.1679 5.47686 14.7535 5 16.5 5C18.2465 5 19.8321 5.47686 21 6.25278V19.2528C19.8321 18.4769 18.2465 18 16.5 18C14.7535 18 13.1679 18.4769 12 19.2528" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <h2 className="text-sm font-medium text-white/70">Informações Úteis</h2>
+        <h2 className="text-sm font-medium text-white/70">Useful Information</h2>
         {pinnedItems.length > 0 && (
           <span className="ml-1.5 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
             {pinnedItems.length}
@@ -89,7 +89,7 @@ export default function Sidebar({ generatedStructure, pinnedItems: propPinnedIte
           <div className="bg-white/5 rounded-lg overflow-hidden mb-4">
             <div className="flex items-center px-3 py-2 bg-white/5 border-b border-white/10">
               <DocumentIcon className="w-4 h-4 mr-2 text-blue-400" />
-              <span className="text-sm font-medium">Estrutura da Aplicação</span>
+              <span className="text-sm font-medium">Application Structure</span>
             </div>
             <div className="p-3">
               <StructurePanel content={generatedStructure} />
@@ -101,7 +101,7 @@ export default function Sidebar({ generatedStructure, pinnedItems: propPinnedIte
         {pinnedItems.length > 0 && (
           <>
             <div className="text-sm font-medium text-white/70 px-1 py-2 border-b border-white/10">
-              Itens Salvos
+              Saved Items
             </div>
             <div className="space-y-3">
               {pinnedItems.map(item => (
@@ -124,10 +124,10 @@ export default function Sidebar({ generatedStructure, pinnedItems: propPinnedIte
                       <button 
                         onClick={() => copyToClipboard(item.content, item.id)}
                         className="text-white/40 hover:text-white/80"
-                        title="Copiar código"
+                        title="Copy code"
                       >
                         {copiedItemId === item.id ? (
-                          <span className="text-xs text-green-400">Copiado!</span>
+                          <span className="text-xs text-green-400">Copied!</span>
                         ) : (
                           <ClipboardDocumentIcon className="w-4 h-4" />
                         )}
@@ -136,7 +136,7 @@ export default function Sidebar({ generatedStructure, pinnedItems: propPinnedIte
                       <button 
                         onClick={() => removePinnedItem(item.id)}
                         className="text-white/40 hover:text-white/80"
-                        title="Remover"
+                        title="Remove"
                       >
                         <TrashIcon className="w-4 h-4" />
                       </button>
@@ -174,9 +174,9 @@ export default function Sidebar({ generatedStructure, pinnedItems: propPinnedIte
         {!generatedStructure && pinnedItems.length === 0 && (
           <div className="text-center py-8 text-white/60">
             <BookmarkIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Nenhuma informação salva</p>
+            <p className="text-sm">No saved information</p>
             <p className="text-xs mt-1">
-              Informações úteis serão detectadas automaticamente durante a conversa
+              Useful information will be automatically detected during the conversation
             </p>
           </div>
         )}

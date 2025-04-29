@@ -33,7 +33,7 @@ const ActiveSessions = () => {
       <button 
         onClick={handleOpenModal} 
         className="ml-1 px-2 py-1.5 rounded-lg text-xs glass-button opacity-80 hover:opacity-100"
-        title="Ver sessões ativas"
+        title="View active sessions"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -60,25 +60,25 @@ const ActiveSessions = () => {
                 </svg>
               </button>
               
-              <h2 className="text-xl font-bold mb-4">Sessões Ativas</h2>
+              <h2 className="text-xl font-bold mb-4">Active Sessions</h2>
               
               {activeSessions.length === 0 ? (
-                <p className="text-center py-4 text-white/70">Nenhuma sessão ativa encontrada</p>
+                <p className="text-center py-4 text-white/70">No active sessions found</p>
               ) : (
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                   {activeSessions.map((session) => (
                     <div key={session.topic} className="p-3 rounded-lg bg-white/5 border border-white/10">
                       <div className="flex justify-between items-center">
                         <div>
-                          <p className="font-medium">Conta: {session.accountId}</p>
-                          <p className="text-xs text-white/70">Rede: {session.network}</p>
+                          <p className="font-medium">Account: {session.accountId}</p>
+                          <p className="text-xs text-white/70">Network: {session.network}</p>
                           <p className="text-xs text-white/50 truncate">Topic: {session.topic}</p>
                         </div>
                         <button 
                           onClick={() => handleDisconnectSession(session.topic)}
                           className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
                         >
-                          Desconectar
+                          Disconnect
                         </button>
                       </div>
                     </div>
@@ -94,9 +94,9 @@ const ActiveSessions = () => {
         isOpen={!!sessionToDisconnect}
         onClose={() => setSessionToDisconnect(null)}
         onConfirm={confirmDisconnectSession}
-        title="Desconectar sessão"
-        message="Tem certeza que deseja desconectar esta sessão?"
-        confirmButtonText="Desconectar"
+        title="Disconnect session"
+        message="Are you sure you want to disconnect this session?"
+        confirmButtonText="Disconnect"
       />
     </>
   );

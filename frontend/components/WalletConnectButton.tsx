@@ -28,19 +28,19 @@ const WalletConnectButton = () => {
         className={`px-3 py-1.5 rounded-lg text-xs font-medium glass-button ${isConnecting ? 'opacity-50' : ''}`}
       >
         {isConnecting
-          ? 'Conectando...'
+          ? 'Connecting...'
           : isConnected
-          ? `Conta: ${accountId?.slice(0, 6)}...${accountId?.slice(-4)}`
-          : 'Conectar Carteira'}
+          ? `Account: ${accountId?.slice(0, 6)}...${accountId?.slice(-4)}`
+          : 'Connect Wallet'}
       </button>
       
       <ConfirmationDialog
         isOpen={showDisconnectConfirm}
         onClose={() => setShowDisconnectConfirm(false)}
         onConfirm={handleDisconnect}
-        title="Desconectar carteira"
-        message="Tem certeza que deseja desconectar sua carteira? Esta ação encerrará sua sessão atual."
-        confirmButtonText="Desconectar"
+        title="Disconnect wallet"
+        message="Are you sure you want to disconnect your wallet? This action will end your current session."
+        confirmButtonText="Disconnect"
       />
     </>
   );

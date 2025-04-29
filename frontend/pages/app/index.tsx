@@ -369,12 +369,12 @@ const AppPage = () => {
                       {/* Subscription Stats (only shown when active) */}
                       {subscription?.active && (
                         <div className="flex items-center space-x-6">
-                          <div className="flex items-center">
+                          {/* <div className="flex items-center">
                             <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                             <span className="text-sm text-gray-300">
                               <span className="font-medium text-white">{subscription.projectsUsed}</span>/{subscription.projectLimit} Projects
                             </span>
-                          </div>
+                          </div> */}
                           <div className="flex items-center">
                             <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
                             <span className="text-sm text-gray-300">

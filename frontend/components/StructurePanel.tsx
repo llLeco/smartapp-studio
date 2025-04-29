@@ -232,9 +232,9 @@ export default function StructurePanel({ content }: StructurePanelProps) {
               <path d="M12 6.25278V19.2528M12 6.25278C10.8321 5.47686 9.24649 5 7.5 5C5.75351 5 4.16789 5.47686 3 6.25278V19.2528C4.16789 18.4769 5.75351 18 7.5 18C9.24649 18 10.8321 18.4769 12 19.2528M12 6.25278C13.1679 5.47686 14.7535 5 16.5 5C18.2465 5 19.8321 5.47686 21 6.25278V19.2528C19.8321 18.4769 18.2465 18 16.5 18C14.7535 18 13.1679 18.4769 12 19.2528" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h3 className="text-sm font-medium mb-2 text-white/90">Nenhuma estrutura gerada</h3>
+          <h3 className="text-sm font-medium mb-2 text-white/90">No structure generated</h3>
           <p className="text-white/50 text-xs">
-            A estrutura do seu SmartApp aparecerá aqui após enviar uma descrição.
+            Your SmartApp structure will appear here after sending a description.
           </p>
         </div>
       </div>
@@ -243,16 +243,16 @@ export default function StructurePanel({ content }: StructurePanelProps) {
 
   return (
     <div className="flex flex-col space-y-4 p-4 overflow-auto scrollbar-custom">
-      {/* Resumo informativo */}
+      {/* Informative summary */}
       <div className="glass p-4 rounded-xl">
         <h3 className="text-sm font-medium mb-3 text-white/90 border-b border-white/10 pb-2">
-          Resumo do SmartApp
+          SmartApp Summary
         </h3>
         
         <div className="space-y-2">
           {structure.appName && (
             <div className="flex justify-between">
-              <span className="text-xs text-white/60">Nome:</span>
+              <span className="text-xs text-white/60">Name:</span>
               <span className="text-xs font-medium text-white">{structure.appName}</span>
             </div>
           )}
@@ -269,7 +269,7 @@ export default function StructurePanel({ content }: StructurePanelProps) {
           
           {structure.tokenRequirements && (
             <div className="flex justify-between">
-              <span className="text-xs text-white/60">Requisitos:</span>
+              <span className="text-xs text-white/60">Requirements:</span>
               <span className="text-xs font-medium text-white">{structure.tokenRequirements}</span>
             </div>
           )}
@@ -285,17 +285,17 @@ export default function StructurePanel({ content }: StructurePanelProps) {
         </div>
       </div>
       
-      {/* Estrutura de arquivos */}
+      {/* File structure */}
       {structure.fileStructure.length > 0 && (
         <div className="glass p-4 rounded-xl">
           <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
             <h3 className="text-sm font-medium text-white/90">
-              Estrutura de Arquivos
+              File Structure
             </h3>
             <button 
               onClick={() => copyToClipboard(content, 'file-structure')}
               className="p-1 rounded-md hover:bg-white/10 transition-colors"
-              title="Copiar estrutura"
+              title="Copy structure"
             >
               {copied === 'file-structure' ? (
                 <ClipboardDocumentCheckIcon className="w-4 h-4 text-green-400" />
@@ -309,11 +309,11 @@ export default function StructurePanel({ content }: StructurePanelProps) {
         </div>
       )}
       
-      {/* Blocos de código */}
+      {/* Code blocks */}
       {structure.codeBlocks.length > 0 && (
         <div className="glass p-4 rounded-xl">
           <h3 className="text-sm font-medium mb-3 text-white/90 border-b border-white/10 pb-2">
-            Blocos de Código Relevantes
+            Relevant Code Blocks
           </h3>
           
           <div className="space-y-4">
@@ -324,7 +324,7 @@ export default function StructurePanel({ content }: StructurePanelProps) {
                   <button 
                     onClick={() => copyToClipboard(block.code, `code-${index}`)}
                     className="p-1 rounded-md hover:bg-white/10 transition-colors"
-                    title="Copiar código"
+                    title="Copy code"
                   >
                     {copied === `code-${index}` ? (
                       <ClipboardDocumentCheckIcon className="w-4 h-4 text-green-400" />
@@ -349,10 +349,10 @@ export default function StructurePanel({ content }: StructurePanelProps) {
         </div>
       )}
       
-      {/* Área de ações */}
+      {/* Actions area */}
       <div className="glass p-4 rounded-xl">
         <h3 className="text-sm font-medium mb-3 text-white/90 border-b border-white/10 pb-2">
-          Ações
+          Actions
         </h3>
         
         <div className="grid grid-cols-2 gap-2">
@@ -361,22 +361,22 @@ export default function StructurePanel({ content }: StructurePanelProps) {
             className="flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg glass-button"
           >
             <DocumentTextIcon className="w-4 h-4 mr-2" />
-            Exportar (.md)
+            Export (.md)
           </button>
           
           <button className="flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg glass-button">
             <DocumentArrowDownIcon className="w-4 h-4 mr-2" />
-            Baixar (.zip)
+            Download (.zip)
           </button>
           
           <button className="flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg glass-button">
             <LinkIcon className="w-4 h-4 mr-2" />
-            Documentação
+            Documentation
           </button>
           
           <button className="flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg glass-button">
             <BeakerIcon className="w-4 h-4 mr-2" />
-            Testar
+            Test
           </button>
         </div>
       </div>

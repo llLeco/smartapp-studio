@@ -66,7 +66,7 @@ const WalletBalance = () => {
           lastUpdated: new Date()
         });
       } catch (err) {
-        console.warn('Erro ao buscar saldos:', err);
+        console.warn('Error fetching balances:', err);
       }
     };
 
@@ -89,7 +89,7 @@ const WalletBalance = () => {
         onClick={toggleDropdown}
         className="px-3 py-1.5 rounded-lg glass-button text-xs font-medium flex items-center"
       >
-        <span className="mr-1">Saldo</span>
+        <span className="mr-1">Balance</span>
         <svg 
           xmlns="http://www.w3.org/2000/svg" 
           className={`h-3 w-3 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} 
@@ -111,7 +111,7 @@ const WalletBalance = () => {
           }}>
           <div className="text-xs space-y-3">
             <div className="flex justify-between items-center pt-1 border-b border-white/10 pb-2">
-              <span className="opacity-70">Rede:</span>
+              <span className="opacity-70">Network:</span>
               <span className="font-medium">{accountInfo.network}</span>
             </div>
             
@@ -126,7 +126,7 @@ const WalletBalance = () => {
             </div>
             
             <div className="flex justify-between items-center text-[10px] border-t border-white/10 pt-2 mt-2">
-              <span className="opacity-50">Atualizado:</span>
+              <span className="opacity-50">Updated:</span>
               <span className="opacity-70">{formattedTime}</span>
             </div>
           </div>
