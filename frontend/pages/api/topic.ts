@@ -13,12 +13,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       
       // Forward request to backend to get topic messages
+      console.log(`${backendUrl}/api/topic/messages/${topicId}`);
       const response = await fetch(`${backendUrl}/api/topic/messages/${topicId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
       });
+      console.log(response);
       
       if (!response.ok) {
         const errorData = await response.json();
