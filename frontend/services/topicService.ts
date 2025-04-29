@@ -1,12 +1,5 @@
 import { NftMetadata } from './licenseService';
 
-// --- Configuration ---
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3001";
-function api(path: string) {
-  return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
-}
-
-// --- Types ---
 export interface TopicMessage {
   sequenceNumber: string;
   consensusTimestamp: string;
@@ -49,7 +42,6 @@ export async function getTopicMessages(topicId: string): Promise<{
   
   // Fetch fresh data
   try {
-    console.log(`Fetching messages for topic ${topicId}`);
     const response = await fetch(`/api/topic?topicId=${topicId}`, {
       method: 'GET',
       headers: {

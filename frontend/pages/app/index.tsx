@@ -12,11 +12,6 @@ import {
   mapSubscriptionToInfo, 
   SubscriptionInfo as SubInfo,
 } from '../../services/subscriptionService';
-
-// Configurar URL base do backend
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
-
 // Interface for subscription details
 interface SubscriptionInfo {
   active: boolean;
@@ -218,14 +213,14 @@ const AppPage = () => {
     
     try {
       // Get the HSUITE token ID from environment
-      const hsuiteTokenIdRes = await fetch(api('/api/hedera/hsuitetokenid'));
+      const hsuiteTokenIdRes = await fetch('/api/hedera?type=hsuitetokenid');
       const hsuiteTokenIdData = await hsuiteTokenIdRes.json();
       const hsuiteTokenId = hsuiteTokenIdData.tokenId;
 
       console.log('HSUITE token ID:', hsuiteTokenId);
       
       // Get operator ID for the transaction
-      const operatorRes = await fetch(api('/api/hedera/network'));
+      const operatorRes = await fetch('/api/hedera?type=network');
       const operatorData = await operatorRes.json();
 
       console.log('Operator ID:', operatorData);

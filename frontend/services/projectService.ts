@@ -1,14 +1,5 @@
-// frontend/services/projectService.ts
-
 import { getTopicMessages } from './topicService';
 
-// --- Configuration ---
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3001";
-function api(path: string) {
-  return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
-}
-
-// --- Types ---
 export interface Project {
   projectTopicId: string;
   projectName: string;

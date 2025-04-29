@@ -1,14 +1,5 @@
-import { Client, Transaction } from "@hashgraph/sdk";
-import getDAppConnector from "../lib/walletConnect";
-
-// --- Configuration ---
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3001";
-function api(path: string) {
-  return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
-}
 const MIRROR_NODE_URL = process.env.NEXT_PUBLIC_MIRROR_NODE_URL || "https://testnet.mirrornode.hedera.com";
 
-// --- Types ---
 export interface NetworkInfo {
   mirrorNodeUrl: string;
   operatorId: string;

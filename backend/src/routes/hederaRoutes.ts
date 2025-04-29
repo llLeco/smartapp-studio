@@ -157,7 +157,7 @@ router.get('/hsuitetokenid', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/licenseTokenId', async (req: Request, res: Response) => {
+router.get('/licensetokenid', async (req: Request, res: Response) => {
   try {
     const tokenId = getLicenseCollectionId();
     return res.status(200).json({ success: true, tokenId });

@@ -1,10 +1,7 @@
-// frontend/services/licenseService.ts
 import { 
   Client,
   AccountId,
-  PrivateKey,
   Hbar, 
-  PublicKey, 
   TokenAssociateTransaction,
   Transaction,
   TransactionId,
@@ -13,7 +10,7 @@ import {
 } from "@hashgraph/sdk";
 import getDAppConnector from "../lib/walletConnect";
 import type { DAppSigner } from "@hashgraph/hedera-wallet-connect";
-import { createTopic, getTopicMessages } from "./topicService";
+import { createTopic } from "./topicService";
 import { getTokenDetails } from "./hederaService";
 
 // --- Types ---
@@ -33,17 +30,8 @@ export interface NftInfo {
   metadata: NftMetadata;
 }
 
-// --- Configuration ---
-const NETWORK = "testnet";
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3001";
-function api(path: string) {
-  return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
-}
-
 // Mirror Node URL
-const MIRROR_NODE_URL = 
-  process.env.NEXT_PUBLIC_MIRROR_NODE_URL || 
-  "https://testnet.mirrornode.hedera.com";
+const MIRROR_NODE_URL = process.env.NEXT_PUBLIC_MIRROR_NODE_URL || "https://testnet.mirrornode.hedera.com";
 
 // Create a client for transaction preparation
 function getClient() {
@@ -144,7 +132,7 @@ export async function createLicenseTopic(
     const topicId = await createTopic(metadata);
     console.log(`Created topic with ID: ${topicId}`);
 
-    const licenseTokenIdRes = await fetch(api('/api/hedera/licensetokenid'));
+    const licenseTokenIdRes = await fetch('/api/hedera?type=licensetokenid');
     const licenseTokenIdData = await licenseTokenIdRes.json();
     
     console.log(`License token ID response:`, licenseTokenIdData);
@@ -229,7 +217,7 @@ export async function associateLicenseToken(
 ): Promise<{ success: boolean } | { error: string }> {
   try {
     //get license token id from backend
-    const licenseTokenIdRes = await fetch(api('/api/hedera/licensetokenid'));
+    const licenseTokenIdRes = await fetch('/api/hedera?type=licensetokenid');
     const licenseTokenIdData = await licenseTokenIdRes.json();
     const licenseTokenId = licenseTokenIdData.tokenId;
 
@@ -348,7 +336,7 @@ export async function transferLicenseToken(
     }
 
     // Get the operator ID from backend for treasury account
-    const operatorRes = await fetch(api('/api/hedera/network'));
+    const operatorRes = await fetch('/api/hedera/network');
     const operatorData = await operatorRes.json();
 
     if (!operatorData.success || !operatorData.operatorId) {
@@ -527,7 +515,7 @@ export async function createLicenseNft(
 export async function getUserLicense(accountId: string) {
   try {
     console.log(`Checking license for account ID: ${accountId}`);
-    const res = await fetch(api(`/api/license/user/${accountId}`));
+    const res = await fetch(`/api/license?accountId=${accountId}`);
     
     if (!res.ok) {
       console.error(`License API returned status: ${res.status}`);
@@ -561,7 +549,7 @@ export const createNewProject = async (
 ): Promise<{ success: boolean; projectTopicId?: string; error?: string }> => {
   try {
     // Primeiro, crie o tópico do projeto
-    const createResponse = await fetch(api('/api/hedera/createProjectTopic'), {
+    const createResponse = await fetch('/api/hedera/createProjectTopic', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -582,7 +570,7 @@ export const createNewProject = async (
     const projectTopicId = topicResult.data;
     
     // Em seguida, registre o projeto no tópico da licença
-    const recordResponse = await fetch(api('/api/hedera/recordProjectMessage'), {
+    const recordResponse = await fetch('/api/hedera/recordProjectMessage', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
