@@ -66,7 +66,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           const license = await getUserLicense(accountId);
           setLicense(license);
 
-          const networkRes = await fetch('/api/hedera/network');
+          const networkRes = await fetch('/api/hedera?type=network');
           const networkData = await networkRes.json();
 
           console.log('Network data:', networkData, license, accountId);

@@ -336,7 +336,7 @@ export async function transferLicenseToken(
     }
 
     // Get the operator ID from backend for treasury account
-    const operatorRes = await fetch('/api/hedera/network');
+    const operatorRes = await fetch('/api/hedera?type=network');
     const operatorData = await operatorRes.json();
 
     if (!operatorData.success || !operatorData.operatorId) {

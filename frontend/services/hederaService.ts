@@ -31,12 +31,7 @@ export interface TransactionResult {
  */
 export async function getNetworkInfo(): Promise<NetworkInfo> {
   try {
-    const response = await fetch(`/api/hedera?type=network`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(`/api/hedera?type=network`);
 
     if (!response.ok) {
       const errorData = await response.json();
