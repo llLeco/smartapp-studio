@@ -18,7 +18,7 @@ const createDAppConnector = async (): Promise<DAppConnector> => {
   const connector = new DAppConnector(
     metadata,
     LedgerId.TESTNET,
-    process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+    process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'e86cf7db9874405c556da31fa2277367',
     Object.values(HederaJsonRpcMethod),
     [HederaSessionEvent.ChainChanged, HederaSessionEvent.AccountsChanged],
     [HederaChainId.Testnet],

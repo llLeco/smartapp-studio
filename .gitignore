@@ -67,7 +67,9 @@ out
 !tsconfig.json
 !**/tsconfig.json
 *.md
+*.mdc
 
 # Uploads
 /uploads
+/backend/uploads
 
