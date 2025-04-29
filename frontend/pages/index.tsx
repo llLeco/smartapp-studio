@@ -21,20 +21,24 @@ export default function Home() {
     const fetchOperatorId = async () => {
       try {
         console.log('Fetching operator ID...');
-        const operatorRes = await fetch('/api/hedera/getOperatorId');
-        const operatorData = await operatorRes.json();
+        const networkRes = await fetch('/api/hedera?type=network');
+        const networkData = await networkRes.json();
+
+        if (!networkData.success || !networkData.operatorId) {
+          throw new Error('Operator ID not available');
+        }
         
-        if (operatorData.success && operatorData.data) {
-          setReceiverAccountId(operatorData.data);
-          console.log('Operator ID obtained: ', operatorData.data);
+        let operatorId = networkData.operatorId;
+        
+        if (networkData.success && operatorId) {
+          setReceiverAccountId(operatorId);
+          console.log('Operator ID obtained: ', operatorId);
         } else {
-          console.error('Failed to get Operator ID:', operatorData);
-          // Set a fallback value for testing
+          console.error('Failed to get Operator ID:', operatorId);
           setReceiverAccountId('0.0.1234567');
         }
       } catch (error) {
         console.error('Error fetching Operator ID:', error);
-        // Set a fallback value for testing
         setReceiverAccountId('0.0.1234567');
       }
     };
