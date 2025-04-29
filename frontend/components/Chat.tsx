@@ -5,8 +5,8 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import MessagePaymentModal from './MessagePaymentModal';
 import { useWallet } from '../hooks/useWallet';
-import { getSubscriptionDetails } from '@/services/subscriptionService';
-import { getUserLicense } from '@/services/licenseService';
+import { getSubscriptionDetails } from '../services/subscriptionService';
+import { getUserLicense } from '../services/licenseService';
 
 // Configurar URL base do backend se necessário
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
