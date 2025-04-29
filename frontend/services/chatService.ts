@@ -73,8 +73,6 @@ export function formatChatHistory(messages: ChatMessage[]): string {
     .join('\n\n');
 }
 
-
-
 export default {
   sendMessage,
   formatChatHistory

@@ -4,13 +4,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'POST') {
     try {
       const { message, topicId, usageQuota } = req.body;
+      console.log('DEBUG CHAT: API handler POST received', { message, topicId, usageQuota });
       
       if (!message) {
+        console.log('DEBUG CHAT: API handler missing message');
         return res.status(400).json({ error: 'Message is required' });
       }
       
       // Backend server URL
       const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+      console.log('DEBUG CHAT: API handler forwarding to backend', `${backendUrl}/api/chat/message`);
       
       // Forward the request to the backend
       const response = await fetch(`${backendUrl}/api/chat/message`, {
@@ -21,18 +24,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         body: JSON.stringify({ message, topicId, usageQuota }),
       });
       
+      const responseData = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        return res.status(response.status).json(errorData);
+        console.log('DEBUG CHAT: API handler backend error', responseData);
+        
+        // Provide more detailed error information
+        return res.status(response.status).json({
+          success: false,
+          error: responseData.error || 'Backend service error',
+          details: responseData
+        });
       }
       
-      const data = await response.json();
-      return res.status(200).json(data);
+      console.log('DEBUG CHAT: API handler success response', { success: responseData.success });
+      return res.status(200).json(responseData);
     } catch (error) {
+      console.error('DEBUG CHAT: API handler exception', error);
       console.error('Error in chat API:', error);
+      
+      // More detailed error response
       return res.status(500).json({ 
         success: false, 
-        error: 'Failed to process chat message',
+        error: error instanceof Error ? error.message : 'Failed to process chat message',
         response: 'An error occurred while processing your request. Please try again.'
       });
     }

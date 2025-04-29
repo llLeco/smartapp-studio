@@ -8,10 +8,6 @@ import { useWallet } from '../hooks/useWallet';
 import { getSubscriptionDetails } from '../services/subscriptionService';
 import { getUserLicense } from '../services/licenseService';
 
-// Configurar URL base do backend se necessário
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
-
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -41,12 +37,11 @@ interface PinnedItem {
 }
 
 export interface ChatProps {
-  onSendMessage: (message: string, usageQuota: number) => Promise<string>;
   generatedStructure: string | null;
   setPinnedItems?: (items: PinnedItem[]) => void;
 }
 
-const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinnedItems }) => {
+const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
   const { accountId, isConnected } = useWallet();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -73,7 +68,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   useEffect(() => {
     const fetchOperatorId = async () => {
       try {
-        const operatorRes = await fetch(api('/api/hedera/network'));
+        const operatorRes = await fetch('/api/hedera?type=network');
         const operatorData = await operatorRes.json();
 
         if (!operatorData.success || !operatorData.operatorId) {
@@ -166,7 +161,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       console.log(`Carregando mensagens do tópico: ${topicId}`);
       
       // Fetch messages from the API
-      const response = await fetch(api(`/api/chat/messages/${topicId}`));
+      const response = await fetch(`/api/chat?topicId=${topicId}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch messages: ${response.status}`);
@@ -269,34 +264,44 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
 
   const saveMessageToTopic = async (message: Message, usageQuota?: number) => {
     if (!topicId) return;
+
+    console.log('DEBUG CHAT: saveMessageToTopic called', message, usageQuota);
     
     try {
       // Send message to backend with current usage quota
-      const response = await fetch(api(`/api/chat/messages/${topicId}`), {
+      console.log('DEBUG CHAT: Making API call to /api/chat with', { message: message.content, topicId, usageQuota });
+      const response = await fetch(`/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: {
-            ...message,
-            usageQuota: usageQuota !== undefined ? usageQuota : currentUsageQuota
-          }
+          message: message.content,
+          topicId,
+          usageQuota: usageQuota !== undefined ? usageQuota : currentUsageQuota
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save message');
+        console.log('DEBUG CHAT: API call failed with status', response.status);
+        const errorData = await response.json();
+        console.log('DEBUG CHAT: Error details', errorData);
+        throw new Error(errorData.error || 'Failed to save message');
       }
 
-      const result = await response.json();
-      
-      // Update local quota if backend returns a new value
-      if (result.usageQuota !== undefined) {
-        setCurrentUsageQuota(result.usageQuota);
+      const data = await response.json();
+      console.log('DEBUG CHAT: API response received', data);
+
+      if (data.usageQuota !== undefined) {
+        console.log('DEBUG CHAT: Updating usage quota from', currentUsageQuota, 'to', data.usageQuota);
+        setCurrentUsageQuota(data.usageQuota);
       }
+
+      return data.response;
     } catch (error) {
+      console.error('DEBUG CHAT: Error in saveMessageToTopic:', error);
       console.error('Error saving message:', error);
+      throw error; // Re-throw the error to be handled by the caller
     }
   };
 
@@ -464,14 +469,18 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
   const handleSendMessage = async () => {
     if (input.trim() === '') return;
     
+    console.log('DEBUG CHAT: handleSendMessage called with input:', input);
+    
     // Check subscription status first
     if (!hasActiveSubscription) {
+      console.log('DEBUG CHAT: No active subscription, showing payment modal');
       setShowPaymentModal(true);
       return;
     }
     
     // Check for remaining quota
     if (currentUsageQuota <= 0) {
+      console.log('DEBUG CHAT: No quota available, showing notification');
       setMessages(prevMessages => [
         ...prevMessages,
         {
@@ -492,22 +501,23 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
       timestamp: new Date()
     };
     
-    console.log("🔄 User message:", input);
+    console.log("DEBUG CHAT: Created user message:", userMessage);
     setMessages(prevMessages => [...prevMessages, userMessage]);
     setInput('');
     setIsLoading(true);
     
     try {
+      console.log("DEBUG CHAT: Calling saveMessageToTopic with quota:", currentUsageQuota);
       // Save user message with current quota
-      await saveMessageToTopic(userMessage, currentUsageQuota);
+      const response = await saveMessageToTopic(userMessage, currentUsageQuota);
       
-      // Get response from AI
-      console.log("🔄 Calling onSendMessage with input:", input);
-      console.log("🔄 Current usage quota:", currentUsageQuota);
-      const response = await onSendMessage(input, currentUsageQuota);
-      console.log("🔄 Received response from AI:", response);
-      
-      // Create assistant message
+      console.log("DEBUG CHAT: Received response from saveMessageToTopic:", response);
+
+      // Check if we got a valid response
+      if (!response) {
+        throw new Error("Received empty response from AI");
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -515,20 +525,22 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         timestamp: new Date()
       };
       
+      console.log("DEBUG CHAT: Created assistant message:", assistantMessage.id);
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
       
       // Save assistant message with decremented quota
       const newQuota = Math.max(0, currentUsageQuota - 1);
-      await saveMessageToTopic(assistantMessage, newQuota);
+      // await saveMessageToTopic(assistantMessage, newQuota);
       
       // Update local quota
       setCurrentUsageQuota(newQuota);
-      console.log("🔄 Updated local quota:", newQuota);
+      console.log("DEBUG CHAT: Updated local quota to:", newQuota);
       
       // Process new message for useful content
       processNewMessage(response);
       
     } catch (error) {
+      console.error('DEBUG CHAT: Error in handleSendMessage:', error);
       console.error('🔴 Error getting response:', error);
       
       // Add error message
@@ -537,7 +549,7 @@ const Chat: React.FC<ChatProps> = ({ onSendMessage, generatedStructure, setPinne
         {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'Sorry, an error occurred while processing your request.',
+          content: `Sorry, an error occurred while processing your request: ${error instanceof Error ? error.message : 'Unknown error'}`,
           timestamp: new Date()
         }
       ]);

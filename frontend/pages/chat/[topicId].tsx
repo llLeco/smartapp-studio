@@ -10,7 +10,7 @@ import ActiveSessions from '../../components/ActiveSessions';
 import BottomNavBar from '../../components/BottomNavBar';
 import PageBackground from '../../components/PageBackground';
 import styles from '../../styles/Home.module.css';
-import { askAssistant } from '../../utils/apiHelpers';
+// import { askAssistant } from '../../utils/apiHelpers';
 
 // Componente para criar estrelas no fundo
 const Stars = () => {
@@ -118,20 +118,20 @@ export default function ProjectChatPage() {
   };
 
   // Function to handle sending messages to the AI
-  const handleSendMessage = async (message: string, usageQuota: number) => {
-    if (!topicId) {
-      throw new Error('No topicId provided');
-    }
+  // const handleSendMessage = async (message: string, usageQuota: number) => {
+  //   if (!topicId) {
+  //     throw new Error('No topicId provided');
+  //   }
     
-    try {
-      // Use the askAssistant function to send the message to the AI
-      const response = await askAssistant(message, topicId as string, usageQuota);
-      return response;
-    } catch (error) {
-      console.error('Error sending message to AI:', error);
-      throw error;
-    }
-  };
+  //   try {
+  //     // Use the askAssistant function to send the message to the AI
+  //     const response = await askAssistant(message, topicId as string, usageQuota);
+  //     return response;
+  //   } catch (error) {
+  //     console.error('Error sending message to AI:', error);
+  //     throw error;
+  //   }
+  // };
 
   // Se não estiver montado ou conectado, não renderizar nada
   if (!mounted || !isConnected || !topicId) {
@@ -188,7 +188,6 @@ export default function ProjectChatPage() {
               {/* Área de chat */}
               <div className="flex-1 flex flex-col overflow-hidden">
                 <Chat 
-                  onSendMessage={handleSendMessage}
                   generatedStructure={generatedStructure}
                   setPinnedItems={setPinnedItems}
                 />

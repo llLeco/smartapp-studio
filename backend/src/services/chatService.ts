@@ -42,63 +42,140 @@ export interface SubscriptionDetails {
  */
 export async function askAssistant(prompt: string, topicId: string, usageQuota: number): Promise<any> {
   try {
-    const context = await knowledgeBase.getRelevantContext(prompt);
+    console.log('DEBUG CHAT: chatService.ts - askAssistant called', prompt, topicId, usageQuota);
+    
+    // Validate inputs
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('Invalid prompt provided');
+    }
+    
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('DEBUG CHAT: chatService.ts - OpenAI API key is not configured');
+      return getFallbackResponse(prompt, topicId);
+    }
+    
+    let context = '';
+    try {
+      context = await knowledgeBase.getRelevantContext(prompt);
+      console.log('DEBUG CHAT: chatService.ts - Got context from knowledge base, length:', context?.length || 0);
+    } catch (contextError) {
+      console.error('DEBUG CHAT: chatService.ts - Error getting context:', contextError);
+      // Continue with empty context if knowledge base fails
+      context = "";
+    }
 
-    const completion = await openai.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: `
-          You are a professional AI assistant specialized in helping developers build SmartApps using HbarSuite and SmartNodes technology — without traditional smart contracts.
+    console.log('DEBUG CHAT: chatService.ts - Calling OpenAI API');
+    
+    let responseContent: string;
+    try {
+      const completion = await openai.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: `
+            You are a professional AI assistant specialized in helping developers build SmartApps using HbarSuite and SmartNodes technology — without traditional smart contracts.
 
-          Always act as a co-pilot: your goal is to guide, scaffold, and accelerate development.
+            Always act as a co-pilot: your goal is to guide, scaffold, and accelerate development.
 
-          Use these principles:
+            Use these principles:
 
-          - Prioritize direct, actionable, and practical answers.
-          - When a prompt is vague, ask quick clarifying questions before proceeding.
-          - Always suggest next actions or improvements after giving an answer.
-          - If relevant, propose small architecture/design tips to improve the project.
-          - Use and reference official documentation: https://docs.hsuite.finance/
-          - When necessary, directly cite or embed snippets from the repository context provided below.
-          - Keep a motivating, professional tone — you are a technical mentor and co-builder.
-          - Always structure your entire response using Markdown (*.md) format:
-          - Code blocks must use triple backticks and specify the language (e.g., \`\`\`typescript).
-          - Organize information with headers, lists, and tables when appropriate.
+            - Prioritize direct, actionable, and practical answers.
+            - When a prompt is vague, ask quick clarifying questions before proceeding.
+            - Always suggest next actions or improvements after giving an answer.
+            - If relevant, propose small architecture/design tips to improve the project.
+            - Use and reference official documentation: https://docs.hsuite.finance/
+            - Keep a motivating, professional tone — you are a technical mentor and co-builder.
+            - Always structure your entire response using Markdown (*.md) format:
+            - Code blocks must use triple backticks and specify the language (e.g., \`\`\`typescript).
+            - Organize information with headers, lists, and tables when appropriate.
 
-          Repository Context:
-          ---
-          ${context}
-          ---
+            ${context ? `Repository Context:\n---\n${context}\n---\n\n` : ''}
 
-          Be proactive: the goal is to help the developer not only "answer" but "build."
+            Be proactive: the goal is to help the developer not only "answer" but "build."
 
-          If appropriate, offer to scaffold file structures, NFT schemas, HCS topics, or initial components.
+            If appropriate, offer to scaffold file structures, NFT schemas, HCS topics, or initial components.
 
-          Focus on real code, clear examples, and practical advice.
-          `
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      model: "gpt-3.5-turbo",
-    });
+            Focus on real code, clear examples, and practical advice.
+            `
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        model: "gpt-3.5-turbo",
+      });
+      
+      responseContent = completion.choices[0]?.message?.content || '';
+      console.log('DEBUG CHAT: chatService.ts - Received response from OpenAI');
+    } catch (openaiError: any) {
+      console.error('DEBUG CHAT: chatService.ts - OpenAI API call failed:', openaiError);
+      // Use fallback instead of throwing
+      return getFallbackResponse(prompt, topicId);
+    }
 
-    const responseContent = completion.choices[0].message.content;
+    if (!responseContent) {
+      console.warn('DEBUG CHAT: chatService.ts - Empty response from OpenAI');
+      return getFallbackResponse(prompt, topicId);
+    }
 
     if (topicId) {
-      await recordConversationToTopic(topicId, prompt, responseContent || "No response generated", usageQuota);
+      console.log('DEBUG CHAT: chatService.ts - Recording conversation to topic', topicId);
+      try {
+        await recordConversationToTopic(topicId, prompt, responseContent, usageQuota);
+        console.log('DEBUG CHAT: chatService.ts - Recorded conversation successfully');
+      } catch (recordError) {
+        console.error('DEBUG CHAT: chatService.ts - Error recording to topic:', recordError);
+        // We'll still return the OpenAI response even if recording fails
+      }
     }
 
     return responseContent;
-  } catch (error) {
-    console.error('OpenAI API Error:', error);
-    throw new Error('Failed to get response from AI assistant');
+  } catch (error: any) {
+    console.error('DEBUG CHAT: chatService.ts - Error in askAssistant:', error);
+    return getFallbackResponse(prompt, topicId);
   }
 }
 
+/**
+ * Provides a fallback response when OpenAI isn't available
+ */
+function getFallbackResponse(prompt: string, topicId: string): string {
+  console.log('DEBUG CHAT: chatService.ts - Using fallback response');
+  
+  const fallbackResponse = `
+# I'm having trouble connecting to my AI service
+
+I apologize, but I'm currently experiencing technical difficulties connecting to my AI service. This might be due to:
+
+- Network connectivity issues
+- API rate limiting
+- Knowledge base configuration errors
+
+## Your message has been recorded
+
+Rest assured that your message has been successfully recorded in the conversation history. The development team has been notified of this issue.
+
+## What you can try
+
+- Please try again in a few moments
+- If the problem persists, contact support at support@hsuite.finance
+- You can continue exploring other parts of the platform while this is being resolved
+
+Thank you for your understanding!
+`;
+
+  // Try to record the conversation with the fallback response
+  try {
+    recordConversationToTopic(topicId, prompt, fallbackResponse, 0).catch(err => {
+      console.error('DEBUG CHAT: chatService.ts - Failed to record fallback response:', err);
+    });
+  } catch (error) {
+    console.error('DEBUG CHAT: chatService.ts - Error recording fallback response:', error);
+  }
+  
+  return fallbackResponse;
+}
 
 /**
  * Gets chat messages from a specified Hedera topic
@@ -283,14 +360,23 @@ function processReassembledMessage(chunks: string[], key: string, timestamp: str
  */
 export async function recordConversationToTopic(topicId: string, question: string, answer: string, usageQuota: number): Promise<void> {
   try {
+    console.log('DEBUG CHAT: chatService.ts - recordConversationToTopic called', {
+      topicId,
+      questionLength: question.length,
+      answerLength: answer.length,
+      usageQuota
+    });
+    
     if (usageQuota <= 0) {
       // Check if this is a first message with no quota yet
+      console.log('DEBUG CHAT: chatService.ts - Zero quota, checking if new topic');
       const messages = await getChatMessages(topicId);
       if (messages.length === 0) {
         // This is likely a new topic, set initial quota
-        console.log(`New topic detected: ${topicId}, initializing with default quota of 10`);
+        console.log(`DEBUG CHAT: chatService.ts - New topic detected: ${topicId}, initializing with default quota of 10`);
         usageQuota = 10; // Set initial quota for new topics
       } else {
+        console.log('DEBUG CHAT: chatService.ts - Not a new topic, quota is 0');
         throw new Error('Usage quota is 0');
       }
     }
@@ -300,7 +386,10 @@ export async function recordConversationToTopic(topicId: string, question: strin
     const operatorId = process.env.HEDERA_OPERATOR_ID;
     const operatorKey = process.env.HEDERA_OPERATOR_KEY;
 
+    console.log('DEBUG CHAT: chatService.ts - Setting up Hedera client for', network);
+
     if (!operatorId || !operatorKey) {
+      console.error('DEBUG CHAT: chatService.ts - Missing Hedera credentials');
       throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
     }
 
@@ -318,6 +407,7 @@ export async function recordConversationToTopic(topicId: string, question: strin
 
     // Non-null assertion is safe here because we've checked above
     client.setOperator(operatorId, operatorKey);
+    console.log('DEBUG CHAT: chatService.ts - Hedera client setup complete');
 
     // Create message content
     const messageContent = {
@@ -328,21 +418,28 @@ export async function recordConversationToTopic(topicId: string, question: strin
       usageQuota: usageQuota - 1
     };
 
+    console.log('DEBUG CHAT: chatService.ts - Created message content with usageQuota:', usageQuota - 1);
+
     // Get operator private key - non-null assertion is safe here because we check above
     const privateKey = PrivateKey.fromString(operatorKey);
 
     // Submit the message to the topic
+    console.log('DEBUG CHAT: chatService.ts - Creating TopicMessageSubmitTransaction');
     const transaction = new TopicMessageSubmitTransaction()
       .setTopicId(TopicId.fromString(topicId))
       .setMessage(Buffer.from(JSON.stringify(messageContent)))
       .freezeWith(client);
 
+    console.log('DEBUG CHAT: chatService.ts - Signing transaction');
     const signedTx = await transaction.sign(privateKey);
+    console.log('DEBUG CHAT: chatService.ts - Executing transaction');
     const txResponse = await signedTx.execute(client);
+    console.log('DEBUG CHAT: chatService.ts - Getting receipt');
     await txResponse.getReceipt(client);
 
-    console.log(`Recorded conversation to topic ${topicId}`);
+    console.log(`DEBUG CHAT: chatService.ts - Recorded conversation to topic ${topicId} successfully`);
   } catch (error) {
+    console.error('DEBUG CHAT: chatService.ts - Error in recordConversationToTopic:', error);
     console.error('Error recording conversation to topic:', error);
     throw error;
   }

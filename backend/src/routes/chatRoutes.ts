@@ -5,10 +5,15 @@ const router = express.Router();
 
 // Route to handle chat messages
 router.post('/message', async (req: Request, res: Response) => {
+  console.log('DEBUG CHAT: chatRoutes.ts - Received message Request', req.body);
   try {
     const { message, topicId, usageQuota } = req.body;
+    console.log('DEBUG CHAT: chatRoutes.ts - message', message);
+    console.log('DEBUG CHAT: chatRoutes.ts - topicId', topicId);
+    console.log('DEBUG CHAT: chatRoutes.ts - usageQuota', usageQuota);
     
     if (!message) {
+      console.log('DEBUG CHAT: chatRoutes.ts - Missing message');
       return res.status(400).json({ 
         success: false, 
         error: 'Message is required' 
@@ -16,22 +21,25 @@ router.post('/message', async (req: Request, res: Response) => {
     }
     
     if (!topicId) {
+      console.log('DEBUG CHAT: chatRoutes.ts - Missing topicId');
       return res.status(400).json({ 
         success: false, 
         error: 'Topic ID is required' 
       });
     }
     
-    console.log(`Processing chat message for topic ${topicId}: ${message}`);
+    console.log(`DEBUG CHAT: chatRoutes.ts - Processing message for topic ${topicId}`);
     
     // Use the AI assistant to generate a response, passing the topicId
     const response = await askAssistant(message, topicId, usageQuota);
+    console.log('DEBUG CHAT: chatRoutes.ts - Got response from askAssistant');
     
     return res.status(200).json({ 
       success: true, 
       response 
     });
   } catch (error: any) {
+    console.error('DEBUG CHAT: chatRoutes.ts - Error processing message:', error);
     console.error('Error processing chat message:', error);
     return res.status(500).json({ 
       success: false, 
@@ -42,6 +50,7 @@ router.post('/message', async (req: Request, res: Response) => {
 
 // Route to get chat messages from a topic
 router.get('/messages/:topicId', async (req: Request, res: Response) => {
+  console.log('Received get messages Request', req.params);
   try {
     const { topicId } = req.params;
     
