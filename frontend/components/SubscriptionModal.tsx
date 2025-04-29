@@ -5,10 +5,6 @@ import { Transaction } from '@hashgraph/sdk';
 import { createPaymentTransaction, getUserLicense } from '../services/licenseService';
 import { executeSignedTransaction, getTokenDetails } from '../services/hederaService';
 
-// Configure backend URL base
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
-
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -70,7 +66,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           const license = await getUserLicense(accountId);
           setLicense(license);
 
-          const networkRes = await fetch(api('/api/hedera/network'));
+          const networkRes = await fetch('/api/hedera/network');
           const networkData = await networkRes.json();
 
           console.log('Network data:', networkData, license, accountId);
