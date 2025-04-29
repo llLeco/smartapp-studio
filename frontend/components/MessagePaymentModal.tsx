@@ -5,7 +5,7 @@ import { createMessagePaymentTransaction } from '../services/licenseService';
 import { executeSignedTransaction, getTokenDetails } from '../services/hederaService';
 
 // Configure API base URL
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
 
 // HSUITE Token ID
