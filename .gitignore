@@ -67,7 +67,7 @@ out
 !tsconfig.json
 !**/tsconfig.json
 embeddings.json
-backend/database/embeddings.json
+!backend/src/database/embeddings.json
 *.md
 *.mdc
 
