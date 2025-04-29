@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useWallet } from '../hooks/useWallet';
 import { Transaction } from '@hashgraph/sdk';
 import { createPaymentTransaction, getUserLicense } from '../services/licenseService';
-import { executeSignedTransaction, getTokenDetails } from '@/services/hederaService';
+import { executeSignedTransaction, getTokenDetails } from '../services/hederaService';
 
 // Configure backend URL base
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
