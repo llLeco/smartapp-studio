@@ -6,7 +6,7 @@ import Link from 'next/link';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 import { useState, useEffect } from 'react';
 import SubscriptionModal from '../components/SubscriptionModal';
-import { getUserLicense } from '@/services/licenseService';
+import { getUserLicense } from '../services/licenseService';
 
 export default function Home() {
   const router = useRouter();

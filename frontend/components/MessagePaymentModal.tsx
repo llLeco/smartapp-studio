@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { Transaction } from '@hashgraph/sdk';
 import { createMessagePaymentTransaction } from '../services/licenseService';
-import { executeSignedTransaction, getTokenDetails } from '@/services/hederaService';
+import { executeSignedTransaction, getTokenDetails } from '../services/hederaService';
 
 // Configure API base URL
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
