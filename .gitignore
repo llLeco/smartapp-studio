@@ -64,6 +64,8 @@ out
 *.json
 !package.json
 !**/package.json
+!tsconfig.json
+!**/tsconfig.json
 *.md
 
 # Uploads
