@@ -9,7 +9,7 @@ import { getSubscriptionDetails } from '../services/subscriptionService';
 import { getUserLicense } from '../services/licenseService';
 
 // Configurar URL base do backend se necessário
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const api = (path: string) => `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}`;
 
 interface Message {

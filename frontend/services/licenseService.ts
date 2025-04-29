@@ -35,8 +35,7 @@ export interface NftInfo {
 
 // --- Configuration ---
 const NETWORK = "testnet";
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 function api(path: string) {
   return `${BACKEND_URL}${path.startsWith("/") ? path : "/" + path}`;
 }
