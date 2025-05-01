@@ -1,146 +1,192 @@
-
 # SmartApp Studio
 
-## Overview
+## 📌 Project Overview
 
-SmartApp Studio is an AI-assisted platform that revolutionizes the development of decentralized applications on the Hedera network. Developed during the Hedera Hackathon 2024, our solution enables developers to create sophisticated SmartApps without the need to write traditional smart contracts, using HbarSuite and SmartNodes technologies.
+SmartApp Studio is an AI-assisted platform that revolutionizes the development of decentralized applications on the Hedera network. Our platform enables developers to create sophisticated SmartApps without writing traditional smart contracts, using HbarSuite and SmartNodes technologies.
 
-**Problem:** Developing decentralized applications requires specialized knowledge in blockchain and smart contract programming, creating a significant entry barrier.
+**Problem Solved:**
+- Traditional blockchain development requires specialized knowledge in smart contract programming
+- The entry barrier for decentralized application development is prohibitively high
+- Developing for Hedera requires understanding multiple technologies (HTS, HCS, Mirror Node)
 
-**Solution:** SmartApp Studio uses generative AI and the HCS-10 protocol to guide developers through the process of creating decentralized applications, automatically generating project structures, NFT schemas, and functional base code.
+**Why It Matters:**
+SmartApp Studio democratizes blockchain development by using generative AI and the HCS-10 protocol to guide developers through the process of creating decentralized applications, automatically generating project structures, NFT schemas, and functional base code.
 
-## 🚀 Demo
+## 📌 How Hedera is Used
 
-[Watch the demonstration (5 min)](https://youtu.be/link-to-your-demo)
+### Hedera Token Service (HTS)
+- **License NFT Minting**
+  - Creates unique NFT licenses that grant access to SmartApp Studio
+  - Stores topic IDs as NFT metadata to link licenses with conversation history
+  - File: `backend/src/services/licenseService.ts`
 
-### Demo Walkthrough:
+- **Payment System**
+  - Uses HSUITE tokens for monetization
+  - Token transfers for access to premium features
+  - File: `frontend/components/MessagePaymentModal.tsx`
 
-1. Hedera wallet connection via WalletConnect
-2. Creation of a new SmartApp project
-3. Interaction with the AI assistant to describe the desired application
-4. Structure and code generation by the assistant
-5. Visualization of extracted content (code snippets, links)
-6. Demonstration of the HSUITE token payment system
-7. Verification of messages stored in HCS topics
+### Hedera Consensus Service (HCS) & HCS-10
+- **Decentralized Storage & Communication**
+  - Records all conversations in HCS topics
+  - Implements HCS-10 protocol for AI agent communication
+  - File: `backend/src/services/chatService.ts`
 
-## 🔗 Deployment Links
+- **Topic Management**
+  - Creates separate topics for each project
+  - Allows users to create and manage multiple projects
+  - File: `backend/src/services/projectService.ts`
 
-- **Main HCS Topic:** [0.0.XXXXX (Testnet)](https://hashscan.io/testnet/topic/0.0.XXXXX)
-- **HSUITE Token:** [0.0.2203022 (Testnet)](https://hashscan.io/testnet/token/0.0.2203022)
-- **Live Application:** [smartapp-studio.vercel.app](https://smartapp-studio.vercel.app)
+### Mirror Node
+- **Historical Data Retrieval**
+  - Fetches message history from HCS topics
+  - Verifies token balances and information
+  - File: `backend/src/services/hederaService.ts`
 
-## 🔍 Hedera Innovation and Integration
+- **Account Validation**
+  - Retrieves account information and NFTs
+  - Validates licenses and subscriptions
+  - File: `backend/src/services/subscriptionService.ts`
 
-### Hedera Usage
+## 📌 HCS-10 Usage
 
-SmartApp Studio utilizes multiple Hedera services:
+SmartApp Studio implements the HCS-10 protocol for AI agent communication on Hedera Consensus Service:
 
-1. **HCS (Hedera Consensus Service):**
-   - Decentralized storage of conversations in HCS topics
-   - Implementation of the HCS-10 protocol for AI agent communication
-   - Code: [/backend/src/services/hederaService.ts#L120-L180](https://github.com/yourusername/smartapp-studio/blob/main/backend/src/services/hederaService.ts#L120-L180)
+- **Message Structure**
+  - All messages follow standardized format with type identifiers:
+    - `CHAT_TOPIC`: For AI-user conversations
+    - `LICENSE_CREATION`: For creating and tracking licenses
+    - `PROJECT_CREATION`: For new project initialization
+    - `SUBSCRIPTION_CREATED`: For subscription management
 
-2. **HTS (Hedera Token Service):**
-   - Payment system based on HSUITE tokens
-   - Token transfers for access to premium features
-   - Code: [/frontend/components/MessagePaymentModal.tsx#L50-L120](https://github.com/yourusername/smartapp-studio/blob/main/frontend/components/MessagePaymentModal.tsx#L50-L120)
+- **Topic Organization**
+  - **License Topics**: Main topics associated with NFT licenses
+  - **Project Topics**: Secondary topics for each user project
+  - **Chunked Messages**: Support for large responses split into multiple chunks
 
-3. **Mirror Node API:**
-   - Retrieval of message history from HCS topics
-   - Verification of token balances and information
-   - Code: [/backend/src/services/aiService.ts#L78-L134](https://github.com/yourusername/smartapp-studio/blob/main/backend/src/services/aiService.ts#L78-L134)
+- **Message Flow**
+  1. User sends prompt to AI Assistant
+  2. Backend processes request and calls AI service
+  3. Response is recorded to appropriate topic using HCS-10 protocol
+  4. Frontend retrieves and displays message history from topics
 
-### HIP-991 and HCS-10 Implementation
+The main implementation can be found in:
+- `backend/src/services/chatService.ts`
+- `backend/src/services/topicService.ts`
 
-Our platform implements HIP-991 (Permissionless revenue-generating Topic Ids) and the HCS-10 protocol (AI Agent Communication on HCS):
-
-1. **HIP-991:**
-   - Operation of revenue-generating topics for each project
-   - Service monetization via HSUITE token payments
-   - Code: [/backend/src/routes/hedera.ts#L200-L260](https://github.com/yourusername/smartapp-studio/blob/main/backend/src/routes/hedera.ts#L200-L260)
-
-2. **HCS-10:**
-   - Communication protocol between the AI assistant and users
-   - Standardized format for topic messages
-   - Support for chunked messages for extensive content
-   - Code: [/backend/src/services/aiService.ts#L280-L350](https://github.com/yourusername/smartapp-studio/blob/main/backend/src/services/aiService.ts#L280-L350)
-
-## 🏗️ Architecture
-
-**Frontend:**
-- Next.js, React, TypeScript
-- Tailwind CSS, Shadcn/ui
-- WalletConnect for Hedera authentication
-
-**Backend:**
-- Node.js, Express, TypeScript
-- OpenAI API integration
-- Hedera SDK for network interaction
-
-**Storage:**
-- Hedera Consensus Service (HCS)
-- HCS-10 Protocol
-
-**Payments:**
-- Hedera Token Service (HTS)
-- HSUITE Token
-
-## 💻 How to Run Locally
+## 📌 Setup & Build Instructions
 
 ### Prerequisites
-
 - Node.js v16+
 - Hedera Account (Testnet)
 - OpenAI API Key
 
-### Backend
-
+### Backend Setup
 ```bash
 cd backend
 npm install
 cp .env.example .env
-# Configure variables in .env file
-npm run dev
 ```
 
-Required environment variables:
+Configure the following in your `.env` file:
 ```
 OPENAI_API_KEY=your_key_here
 HEDERA_NETWORK=testnet
 HEDERA_OPERATOR_ID=0.0.XXXXX
 HEDERA_OPERATOR_KEY=302e...
 HSUITE_TOKEN_ID=0.0.2203022
+LICENSE_TOKEN_ID=0.0.XXXXX
 ```
 
-### Frontend
+Start the backend server:
+```bash
+npm run dev
+```
 
+### Frontend Setup
 ```bash
 cd frontend
 npm install
 cp .env.example .env.local
-# Configure variables in .env.local file
-npm run dev
 ```
 
-Required environment variables:
+Configure the following in your `.env.local` file:
 ```
 NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
 NEXT_PUBLIC_HSUITE_TOKEN_ID=0.0.2203022
+NEXT_PUBLIC_MESSAGE_PRICE=1000
 ```
 
-## 🧪 Tests
-
+Start the frontend server:
 ```bash
-# Backend
-cd backend
-npm run test
-
-# Frontend
-cd frontend
-npm run test
+npm run dev
 ```
 
-## 📜 License
+### Wallet Connection
+1. Install HashPack, Blade, or other Hedera-compatible wallet
+2. Connect your wallet using the "Connect Wallet" button
+3. Approve the connection in your wallet extension
+
+### Using SmartApp Studio
+1. **Mint License NFT**
+   - After connecting your wallet, go to the "Account" page
+   - Click "Get License" to mint your SmartApp Studio license
+
+2. **Subscribe to Service**
+   - Go to the "Subscriptions" page
+   - Choose a subscription plan and approve the HSUITE token payment
+   - Your subscription will be recorded on the Hedera network
+
+3. **Create Project**
+   - Navigate to "Projects"
+   - Click "New Project" and enter project details
+
+4. **Use Assistant**
+   - Open your project and navigate to the chat interface
+   - Ask questions or describe the SmartApp you want to build
+   - The AI will generate code, structures, and guidance
+
+## 📌 Demo Walkthrough
+
+Follow these steps to experience SmartApp Studio:
+
+1. **Connect Wallet**
+   - Click "Connect Wallet" button in the top-right corner
+   - Approve the connection in your Hedera wallet
+
+2. **Get a License**
+   - Navigate to "Account" page
+   - Click "Get License" to mint your NFT license
+   - Approve the transaction in your wallet
+
+3. **Purchase a Subscription**
+   - Go to "Subscriptions" 
+   - Select a plan and confirm the HSUITE token payment
+   - Your subscription will be recorded on the Hedera network
+
+4. **Create a Project**
+   - Navigate to "Projects" 
+   - Click "New Project"
+   - Enter a name and description for your SmartApp
+
+5. **AI Assistant Interaction**
+   - In your project, describe the app you want to build
+   - The AI will provide code, structure, and guidance
+   - All conversations are stored in your project's HCS topic
+
+6. **View HCS Records**
+   - Navigate to "Account" > "License Details"
+   - Click "View on HashScan" to see your topic messages
+
+## 📌 Deployment Links
+
+- **Main HCS Topic:** [0.0.XXXXX (Testnet)](https://hashscan.io/testnet/topic/0.0.XXXXX)
+- **HSUITE Token:** [0.0.2203022 (Testnet)](https://hashscan.io/testnet/token/0.0.2203022)
+- **License NFT Collection:** [0.0.XXXXX (Testnet)](https://hashscan.io/testnet/token/0.0.XXXXX)
+- **Live Application:** [smartapp-studio.vercel.app](https://smartapp-studio.vercel.app)
+
+---
+
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
