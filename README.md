@@ -192,7 +192,7 @@ npm run dev
 ## 📌 Deployment Links
 
 
-- **Demo Video:** [smartapp-studio.vercel.app](https://youtu.be/TQXTbXemG0s)
+- **Demo Video:** [SmartApp Studio Demo](https://youtu.be/TQXTbXemG0s)
 - **Live Application:** [smartapp-studio.vercel.app](https://smartapp-studio-sgqp.vercel.app/)
 - **Project PitchDeck** [View Pitch Deck](./SmartApp_Studio_PitchDeck.pdf)
 - **License NFT Collection:** [0.0.5892772 (Testnet)](https://hashscan.io/testnet/token/0.0.5892772)
