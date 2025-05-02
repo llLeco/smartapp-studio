@@ -449,6 +449,18 @@ const GetAccessPage = () => {
           if (!licenseProcessData.tokenId || !licenseProcessData.topicId || !licenseProcessData.serialNumber) {
             throw new Error("Missing required license data for token transfer");
           }
+
+          await licenseService.recordLicenseMessage(
+            licenseProcessData.topicId, 
+            licenseProcessData.tokenId, 
+            licenseProcessData.serialNumber, {
+            name: 'SmartApp License #' + licenseProcessData.serialNumber + ' - ' + accountId,
+            description: 'Access license for SmartApp Studio',
+            type: 'LICENSE',
+            creator: accountId,
+            createdAt: new Date().toISOString()
+          }
+        );
           
           // Step: Transfer license token
           console.log("Transferring license token...");

@@ -84,7 +84,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>SmartApp Studio - Build Decentralized Apps Without Smart Contracts</title>
+        <title>SmartApp Studio - Build Web3 Apps Without Smart Contracts</title>
         <meta name="description" content="SmartApp Studio - Create decentralized applications on Hedera without writing smart contracts, powered by AI and SmartNodes" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
@@ -112,10 +112,10 @@ export default function Home() {
                   <div className="relative overflow-hidden px-8 py-12 border-b border-white/10">
                     <div className="relative z-10 text-center">
                       <h1 className="text-4xl sm:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 mb-6">
-                        Build Decentralized Apps Without Smart Contracts
+                        Build Web3 Apps — Without Touching a Smart Contract
                       </h1>
                       <p className="text-xl max-w-3xl mx-auto text-gray-300 mb-8">
-                        SmartApp Studio uses AI and SmartNodes to generate validators and config files that power your decentralized applications on Hedera — no smart contract coding required.
+                        Welcome to SmartApp Studio — the easiest way to create decentralized applications on Hedera. No need to learn Solidity. Just describe what you want and let our AI + SmartNodes handle the rest.
                       </p>
                       <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         {isConnected ? (
@@ -144,23 +144,23 @@ export default function Home() {
                   {/* Problem Section */}
                   <section id="problem" className="px-8 py-12 border-b border-white/10">
                     <div className="max-w-4xl mx-auto">
-                      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6">The Problem</h2>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6">Let's face it — building on blockchain is hard</h2>
                       <p className="text-lg text-gray-300 text-center mb-10">
-                        Building decentralized applications requires deep blockchain expertise, complex smart contract development, and significant security considerations, creating a high barrier to entry for many developers.
+                        Between smart contracts, gas fees, and security risks, most developers hit a wall before shipping anything meaningful in Web3.
                       </p>
                       
                       <div className="grid md:grid-cols-2 gap-6 mt-8">
                         <div className="bg-white/5 rounded-lg p-6 backdrop-blur-sm border border-white/10">
-                          <h3 className="text-lg font-bold text-white mb-3">Smart Contract Complexity</h3>
+                          <h3 className="text-lg font-bold text-white mb-3">Smart Contracts Are Complicated</h3>
                           <p className="text-gray-300">
-                            Writing secure smart contracts requires specialized knowledge and introduces risks of expensive bugs and vulnerabilities.
+                            One small mistake in a smart contract can cost thousands of dollars. Plus, you need specialized knowledge just to get started.
                           </p>
                         </div>
                         
                         <div className="bg-white/5 rounded-lg p-6 backdrop-blur-sm border border-white/10">
-                          <h3 className="text-lg font-bold text-white mb-3">Development Time & Cost</h3>
+                          <h3 className="text-lg font-bold text-white mb-3">Web3 Development Takes Forever</h3>
                           <p className="text-gray-300">
-                            Blockchain development often requires longer development cycles and specialized teams, increasing costs for businesses.
+                            Traditional Web3 development means longer cycles, specialized teams, and higher costs — making it impractical for many cool ideas.
                           </p>
                         </div>
                       </div>
@@ -170,23 +170,23 @@ export default function Home() {
                   {/* Solution Section */}
                   <section className="px-8 py-12 border-b border-white/10">
                     <div className="max-w-4xl mx-auto">
-                      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6">Our Solution</h2>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6">SmartApp Studio makes Web3 simple</h2>
                       <p className="text-lg text-gray-300 text-center mb-10">
-                        SmartApp Studio combines the power of AI with off-chain SmartNodes to simplify decentralized application development on the Hedera network.
+                        We combine AI-powered code generation with off-chain SmartNodes so you can build real decentralized apps — without writing a single smart contract.
                       </p>
                       
                       <div className="bg-white/5 rounded-lg p-6 backdrop-blur-sm border border-white/10 mb-8">
                         <div className="flex flex-col md:flex-row items-center gap-6">
                           <div className="md:w-1/2">
-                            <h3 className="text-xl font-bold text-white mb-4">SmartNodes Instead of Smart Contracts</h3>
+                            <h3 className="text-xl font-bold text-white mb-4">JSON Config Files Instead of Solidity</h3>
                             <p className="text-gray-300">
-                              Replace complex smart contract code with simple JSON configurations that define your application logic. Our off-chain validators from HbarSuite execute your logic while maintaining decentralization and security.
+                              Replace complex smart contract code with simple JSON configurations. Our SmartNodes handle the heavy lifting while keeping your app secure and decentralized.
                             </p>
                           </div>
                           <div className="md:w-1/2">
-                            <h3 className="text-xl font-bold text-white mb-4">AI-Powered Development</h3>
+                            <h3 className="text-xl font-bold text-white mb-4">Your Personal Web3 AI Assistant</h3>
                             <p className="text-gray-300">
-                              Our AI assistant is trained specifically on SmartApp code and patterns, helping you generate complete validators and configuration files with simple prompts — enabling you to flow through your app development.
+                              Just describe what you want to build, and our AI will generate the code and config files for you. It's specifically trained on Web3 patterns to make your life easier.
                             </p>
                           </div>
                         </div>
@@ -196,7 +196,7 @@ export default function Home() {
 
                   {/* Features Section */}
                   <section id="features" className="px-8 py-12 border-b border-white/10">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10">Core Features</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-center mb-10">What You Get</h2>
                     
                     <div className="grid md:grid-cols-3 gap-6">
                       <div className="bg-white/5 rounded-lg p-6 backdrop-blur-sm border border-white/10">
@@ -206,10 +206,10 @@ export default function Home() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
                           </div>
-                          <h3 className="text-lg font-bold text-white">AI-Powered Generation</h3>
+                          <h3 className="text-lg font-bold text-white">AI Assistant</h3>
                         </div>
                         <p className="text-gray-300">
-                          Generate complete validator logic and configuration files with our specialized AI assistant trained on decentralized application patterns.
+                          Chat with a custom-trained AI that builds SmartApp code and validator logic for you. Just describe what you want, and it delivers.
                         </p>
                       </div>
                       
@@ -223,7 +223,7 @@ export default function Home() {
                           <h3 className="text-lg font-bold text-white">Token-Gated Access</h3>
                         </div>
                         <p className="text-gray-300">
-                          Dynamic NFTs serve as your identity and access credentials, providing secure, token-gated access to applications and features.
+                          Dynamic NFTs act as your ID and grant access to your apps and features — perfect for membership sites and premium content.
                         </p>
                       </div>
                       
@@ -234,10 +234,10 @@ export default function Home() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
                           </div>
-                          <h3 className="text-lg font-bold text-white">HCS-10 Event Logging</h3>
+                          <h3 className="text-lg font-bold text-white">On-Chain Logs</h3>
                         </div>
                         <p className="text-gray-300">
-                          All events and access are securely logged to Hedera via HCS-10 topics, providing immutable audit trails for your applications.
+                          Everything is tracked on Hedera using HCS-10 — giving you perfect transparency and audit trails without the complexity.
                         </p>
                       </div>
                     </div>
@@ -250,10 +250,10 @@ export default function Home() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                             </svg>
                           </div>
-                          <h3 className="text-lg font-bold text-white">HSuite Token Subscriptions</h3>
+                          <h3 className="text-lg font-bold text-white">Subscription System</h3>
                         </div>
                         <p className="text-gray-300">
-                          Subscribe to plans using HSuite tokens, with new users receiving free tokens to get started immediately.
+                          Users pay with HSuite tokens (you get test tokens to start). All licenses and features are tied to your NFT, making transactions seamless.
                         </p>
                       </div>
                       
@@ -267,7 +267,7 @@ export default function Home() {
                           <h3 className="text-lg font-bold text-white">WalletConnect 2.0</h3>
                         </div>
                         <p className="text-gray-300">
-                          Securely connect your Hedera wallet with built-in WalletConnect 2.0 integration for a seamless user experience.
+                          Smooth, secure wallet connection built right in — no need to figure out complicated Web3 authentication flows.
                         </p>
                       </div>
                     </div>
@@ -291,15 +291,15 @@ export default function Home() {
                           <span className="text-xl font-bold">2</span>
                         </div>
                         <h3 className="text-lg font-medium mb-2">Subscribe</h3>
-                        <p className="text-gray-400 text-sm">Get HSuite tokens and subscribe to a plan</p>
+                        <p className="text-gray-400 text-sm">Get test HSuite tokens and subscribe to start building</p>
                       </div>
                       
                       <div className="text-center">
                         <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
                           <span className="text-xl font-bold">3</span>
                         </div>
-                        <h3 className="text-lg font-medium mb-2">Define & Generate</h3>
-                        <p className="text-gray-400 text-sm">Use AI to generate validators and config files</p>
+                        <h3 className="text-lg font-medium mb-2">Chat with AI</h3>
+                        <p className="text-gray-400 text-sm">Describe your idea and get complete app structure</p>
                       </div>
                       
                       <div className="text-center">
@@ -307,7 +307,7 @@ export default function Home() {
                           <span className="text-xl font-bold">4</span>
                         </div>
                         <h3 className="text-lg font-medium mb-2">Deploy & Go Live</h3>
-                        <p className="text-gray-400 text-sm">Deploy validators and flow your app development</p>
+                        <p className="text-gray-400 text-sm">Start using your decentralized app right away</p>
                       </div>
                     </div>
                   </section>
@@ -323,18 +323,18 @@ export default function Home() {
                         <div className="relative z-10 mb-12">
                           <div className="flex items-center">
                             <div className="flex-1 text-right pr-8 md:pr-12">
-                              <h3 className="text-lg font-bold text-white">Current MVP</h3>
-                              <p className="text-gray-400 mt-2">Live on testnet with core features</p>
+                              <h3 className="text-lg font-bold text-white">Today (Live on Testnet)</h3>
+                              <p className="text-gray-400 mt-2">Already working and ready to try</p>
                             </div>
                             <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center z-10">
                               <span className="text-sm font-bold">✓</span>
                             </div>
                             <div className="flex-1 pl-8 md:pl-12">
                               <ul className="list-disc text-gray-300 ml-4">
-                                <li>AI SmartApp generation</li>
-                                <li>NFT licensing system</li>
-                                <li>HCS-10 event logging</li>
-                                <li>Token-based subscriptions</li>
+                                <li>SmartApp code generation with AI</li>
+                                <li>NFT licensing + token subscriptions</li>
+                                <li>Hedera logging via HCS-10</li>
+                                <li>WalletConnect 2.0 integration</li>
                               </ul>
                             </div>
                           </div>
@@ -351,10 +351,10 @@ export default function Home() {
                             </div>
                             <div className="flex-1 pl-8 md:pl-12">
                               <ul className="list-disc text-gray-300 ml-4">
-                                <li>Pre-built validator templates</li>
                                 <li>One-click GitHub deployment</li>
+                                <li>Prebuilt app templates</li>
                                 <li>SmartNode deployment wizard</li>
-                                <li>Advanced AI customization</li>
+                                <li>Custom AI tuning for dev teams</li>
                               </ul>
                             </div>
                           </div>
@@ -363,7 +363,7 @@ export default function Home() {
                         <div className="relative z-10">
                           <div className="flex items-center">
                             <div className="flex-1 text-right pr-8 md:pr-12">
-                              <h3 className="text-lg font-bold text-white">Future Vision</h3>
+                              <h3 className="text-lg font-bold text-white">The Vision</h3>
                               <p className="text-gray-400 mt-2">Expanding the ecosystem</p>
                             </div>
                             <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center z-10">
@@ -372,8 +372,8 @@ export default function Home() {
                             <div className="flex-1 pl-8 md:pl-12">
                               <ul className="list-disc text-gray-300 ml-4">
                                 <li>Enterprise SmartApp solutions</li>
-                                <li>Marketplace for SmartApp templates</li>
-                                <li>SDK for custom integrations</li>
+                                <li>SmartApp template marketplace</li>
+                                <li>SDKs for custom integrations</li>
                                 <li>Advanced analytics dashboard</li>
                               </ul>
                             </div>
@@ -386,9 +386,9 @@ export default function Home() {
                   {/* Premium Section - Using SubscriptionBanner */}
                   <section className="px-8 py-12 border-b border-white/10">
                     <div className="max-w-4xl mx-auto">
-                      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8">Get Started Today</h2>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8">Ready to Try?</h2>
                       <p className="text-lg text-gray-300 text-center mb-8">
-                        Connect your wallet, mint your NFT license, and start building with ready-to-use validators and config files to power your decentralized applications.
+                        Connect your wallet, mint your license, and start building your next Web3 app with tools that work for you — not just for devs with smart contract experience.
                       </p>
                       <SubscriptionBanner
                         subscription={null}

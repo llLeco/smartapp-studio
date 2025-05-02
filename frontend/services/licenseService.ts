@@ -537,7 +537,6 @@ export const createNewProject = async (
   usageQuota: number = 3
 ): Promise<{ success: boolean; projectTopicId?: string; error?: string }> => {
   try {
-    // Primeiro, crie o tópico do projeto
     const createResponse = await fetch('/api/hedera/createProjectTopic', {
       method: 'POST',
       headers: {
@@ -558,7 +557,6 @@ export const createNewProject = async (
     
     const projectTopicId = topicResult.data;
     
-    // Em seguida, registre o projeto no tópico da licença
     const recordResponse = await fetch('/api/hedera/recordProjectMessage', {
       method: 'POST',
       headers: {

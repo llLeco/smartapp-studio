@@ -146,7 +146,7 @@ const AppPage = () => {
     }
     
     // Check if subscription is active and project limit not reached
-    if (!subscription?.active || subscription.projectsUsed >= subscription.projectLimit) {
+    if (!subscription?.active || projects.length >= 3) {
       setProjectError('Project limit reached or inactive subscription.');
       return;
     }
@@ -352,12 +352,12 @@ const AppPage = () => {
                       {/* Subscription Stats (only shown when active) */}
                       {subscription?.active && (
                         <div className="flex items-center space-x-6">
-                          {/* <div className="flex items-center">
+                          <div className="flex items-center">
                             <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                             <span className="text-sm text-gray-300">
-                              <span className="font-medium text-white">{subscription.projectsUsed}</span>/{subscription.projectLimit} Projects
+                              <span className="font-medium text-white">{projects.length}</span>/3 Projects
                             </span>
-                          </div> */}
+                          </div>
                           <div className="flex items-center">
                             <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
                             <span className="text-sm text-gray-300">
@@ -377,7 +377,7 @@ const AppPage = () => {
                       )}
                       
                       {/* Create Project Button */}
-                      {subscription?.active && subscription.projectsUsed < subscription.projectLimit ? (
+                      {subscription?.active && projects.length < 3 ? (
                         <button 
                           onClick={() => setShowProjectCreateModal(true)}
                           disabled={projectLoading}
@@ -401,11 +401,13 @@ const AppPage = () => {
                           )}
                         </button>
                       ) : (
-                        (!subscription?.active || subscription?.expired) && (
+                        (!subscription?.active || subscription?.expired || projects.length >= 3) && (
                           <div className="text-sm text-gray-400 italic">
                             {subscription?.expired 
                               ? 'Renew your subscription to create projects' 
-                              : 'Subscribe to create projects'}
+                              : projects.length >= 3
+                                ? 'Maximum limit of 3 projects reached for this DEMO'
+                                : 'Subscribe to create projects'}
                           </div>
                         )
                       )}

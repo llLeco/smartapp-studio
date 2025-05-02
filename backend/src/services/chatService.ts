@@ -42,30 +42,23 @@ export interface SubscriptionDetails {
  */
 export async function askAssistant(prompt: string, topicId: string, usageQuota: number): Promise<any> {
   try {
-    console.log('DEBUG CHAT: chatService.ts - askAssistant called', prompt, topicId, usageQuota);
-    
     // Validate inputs
     if (!prompt || typeof prompt !== 'string') {
       throw new Error('Invalid prompt provided');
     }
-    
+
     if (!process.env.OPENAI_API_KEY) {
-      console.error('DEBUG CHAT: chatService.ts - OpenAI API key is not configured');
       return getFallbackResponse(prompt, topicId);
     }
-    
+
     let context = '';
     try {
       context = await knowledgeBase.getRelevantContext(prompt);
-      console.log('DEBUG CHAT: chatService.ts - Got context from knowledge base, length:', context?.length || 0);
     } catch (contextError) {
-      console.error('DEBUG CHAT: chatService.ts - Error getting context:', contextError);
       // Continue with empty context if knowledge base fails
       context = "";
     }
 
-    console.log('DEBUG CHAT: chatService.ts - Calling OpenAI API');
-    
     let responseContent: string;
     try {
       const completion = await openai.chat.completions.create({
@@ -73,29 +66,42 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
           {
             role: "system",
             content: `
-            You are a professional AI assistant specialized in helping developers build SmartApps using HbarSuite and SmartNodes technology — without traditional smart contracts.
-
-            Always act as a co-pilot: your goal is to guide, scaffold, and accelerate development.
-
-            Use these principles:
-
-            - Prioritize direct, actionable, and practical answers.
-            - When a prompt is vague, ask quick clarifying questions before proceeding.
-            - Always suggest next actions or improvements after giving an answer.
-            - If relevant, propose small architecture/design tips to improve the project.
-            - Use and reference official documentation: https://docs.hsuite.finance/
-            - Keep a motivating, professional tone — you are a technical mentor and co-builder.
-            - Always structure your entire response using Markdown (*.md) format:
-            - Code blocks must use triple backticks and specify the language (e.g., \`\`\`typescript).
-            - Organize information with headers, lists, and tables when appropriate.
-
-            ${context ? `Repository Context:\n---\n${context}\n---\n\n` : ''}
-
-            Be proactive: the goal is to help the developer not only "answer" but "build."
-
-            If appropriate, offer to scaffold file structures, NFT schemas, HCS topics, or initial components.
-
-            Focus on real code, clear examples, and practical advice.
+            You are a professional AI assistant specialized in helping developers build SmartApps using HbarSuite and SmartNodes — without traditional smart contracts.
+            
+            Your role is to **guide, scaffold, and generate validator configurations** in JSON format.
+            
+            Use this behavior model:
+            
+            - If the user's input is vague, ask focused questions to gather enough context to generate a validator file.
+            - Once you have enough data, **always return a complete validator file in JSON** with **inline comments** explaining key parts.
+            - Use code blocks with \`\`\`json and explain logic in Markdown format.
+            - Offer to scaffold full files, NFT token schemas, or topic interfaces when relevant.
+            - Prioritize clarity, simplicity, and actionability.
+            
+            Reference official documentation: https://docs.hsuite.finance/
+            
+            ---
+            
+            **Validator File Examples:**
+            
+            **Account Validator:**
+            \`\`\`json
+            { "smartNodeSecurity": "full", "updateConditions": { "values": [], "controller": "owner" }, "actionsConditions": { "values": [ "transfer", "delete", "update", "allowance-approval", "allowance-delete" ], "controller": "owner" }, "tokenGates": { "fungibles": { "tokens": [ { "tokenId": "0.0.2203022", "amount": 1 } ] }, "nonFungibles": { "tokens": [ { "tokenId": "0.0.2666543", "serialNumbers": [1,2,3], "snapshot": { "cid": "..." } } ] }, "timeRange": { "from": 0, "to": 0 } }, "swapConditions": { "prices": [] } }
+            \`\`\`
+            
+            **Token Validator:**
+            \`\`\`json
+            { "smartNodeSecurity": "full", "updateConditions": { "values": ["name", "symbol"], "controller": "owner" }, "actionsConditions": { "values": ["pause", "unpause", "freeze"], "controller": "owner" }, "feesConditions": { "values": ["fixed"], "controller": "owner" }, "keysConditions": { "values": ["admin", "supply"], "controller": "owner" } }
+            \`\`\`
+            
+            **Topic Validator:**
+            \`\`\`json
+            { "smartNodeSecurity": "full", "actionConditions": { "values": ["update", "delete", "message"], "controller": "owner" }, "updateConditions": { "values": ["memo"], "controller": "owner" }, "customInterface": { "interfaceName": "Dao", "properties": { "daoId": "string", "votingRules": { "threshold": "number" } } } }
+            \`\`\`
+            
+            ---
+            
+            Respond like a mentor — always practical, always building, always validating.
             `
           },
           {
@@ -105,11 +111,9 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
         ],
         model: "gpt-3.5-turbo",
       });
-      
+
       responseContent = completion.choices[0]?.message?.content || '';
-      console.log('DEBUG CHAT: chatService.ts - Received response from OpenAI');
     } catch (openaiError: any) {
-      console.error('DEBUG CHAT: chatService.ts - OpenAI API call failed:', openaiError);
       // Use fallback instead of throwing
       return getFallbackResponse(prompt, topicId);
     }
@@ -120,10 +124,8 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
     }
 
     if (topicId) {
-      console.log('DEBUG CHAT: chatService.ts - Recording conversation to topic', topicId);
       try {
         await recordConversationToTopic(topicId, prompt, responseContent, usageQuota);
-        console.log('DEBUG CHAT: chatService.ts - Recorded conversation successfully');
       } catch (recordError) {
         console.error('DEBUG CHAT: chatService.ts - Error recording to topic:', recordError);
         // We'll still return the OpenAI response even if recording fails
@@ -141,29 +143,28 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
  * Provides a fallback response when OpenAI isn't available
  */
 function getFallbackResponse(prompt: string, topicId: string): string {
-  console.log('DEBUG CHAT: chatService.ts - Using fallback response');
-  
+
   const fallbackResponse = `
-# I'm having trouble connecting to my AI service
+    # I'm having trouble connecting to my AI service
 
-I apologize, but I'm currently experiencing technical difficulties connecting to my AI service. This might be due to:
+    I apologize, but I'm currently experiencing technical difficulties connecting to my AI service. This might be due to:
 
-- Network connectivity issues
-- API rate limiting
-- Knowledge base configuration errors
+    - Network connectivity issues
+    - API rate limiting
+    - Knowledge base configuration errors
 
-## Your message has been recorded
+    ## Your message has been recorded
 
-Rest assured that your message has been successfully recorded in the conversation history. The development team has been notified of this issue.
+    Rest assured that your message has been successfully recorded in the conversation history. The development team has been notified of this issue.
 
-## What you can try
+    ## What you can try
 
-- Please try again in a few moments
-- If the problem persists, contact support at support@hsuite.finance
-- You can continue exploring other parts of the platform while this is being resolved
+    - Please try again in a few moments
+    - If the problem persists, contact support at support@hsuite.finance
+    - You can continue exploring other parts of the platform while this is being resolved
 
-Thank you for your understanding!
-`;
+    Thank you for your understanding!
+    `;
 
   // Try to record the conversation with the fallback response
   try {
@@ -173,7 +174,7 @@ Thank you for your understanding!
   } catch (error) {
     console.error('DEBUG CHAT: chatService.ts - Error recording fallback response:', error);
   }
-  
+
   return fallbackResponse;
 }
 
@@ -360,23 +361,14 @@ function processReassembledMessage(chunks: string[], key: string, timestamp: str
  */
 export async function recordConversationToTopic(topicId: string, question: string, answer: string, usageQuota: number): Promise<void> {
   try {
-    console.log('DEBUG CHAT: chatService.ts - recordConversationToTopic called', {
-      topicId,
-      questionLength: question.length,
-      answerLength: answer.length,
-      usageQuota
-    });
-    
+
     if (usageQuota <= 0) {
       // Check if this is a first message with no quota yet
-      console.log('DEBUG CHAT: chatService.ts - Zero quota, checking if new topic');
       const messages = await getChatMessages(topicId);
       if (messages.length === 0) {
         // This is likely a new topic, set initial quota
-        console.log(`DEBUG CHAT: chatService.ts - New topic detected: ${topicId}, initializing with default quota of 10`);
         usageQuota = 10; // Set initial quota for new topics
       } else {
-        console.log('DEBUG CHAT: chatService.ts - Not a new topic, quota is 0');
         throw new Error('Usage quota is 0');
       }
     }
@@ -386,10 +378,8 @@ export async function recordConversationToTopic(topicId: string, question: strin
     const operatorId = process.env.HEDERA_OPERATOR_ID;
     const operatorKey = process.env.HEDERA_OPERATOR_KEY;
 
-    console.log('DEBUG CHAT: chatService.ts - Setting up Hedera client for', network);
 
     if (!operatorId || !operatorKey) {
-      console.error('DEBUG CHAT: chatService.ts - Missing Hedera credentials');
       throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
     }
 
@@ -407,7 +397,6 @@ export async function recordConversationToTopic(topicId: string, question: strin
 
     // Non-null assertion is safe here because we've checked above
     client.setOperator(operatorId, operatorKey);
-    console.log('DEBUG CHAT: chatService.ts - Hedera client setup complete');
 
     // Create message content
     const messageContent = {
@@ -418,29 +407,21 @@ export async function recordConversationToTopic(topicId: string, question: strin
       usageQuota: usageQuota - 1
     };
 
-    console.log('DEBUG CHAT: chatService.ts - Created message content with usageQuota:', usageQuota - 1);
 
     // Get operator private key - non-null assertion is safe here because we check above
     const privateKey = PrivateKey.fromString(operatorKey);
 
     // Submit the message to the topic
-    console.log('DEBUG CHAT: chatService.ts - Creating TopicMessageSubmitTransaction');
     const transaction = new TopicMessageSubmitTransaction()
       .setTopicId(TopicId.fromString(topicId))
       .setMessage(Buffer.from(JSON.stringify(messageContent)))
       .freezeWith(client);
 
-    console.log('DEBUG CHAT: chatService.ts - Signing transaction');
     const signedTx = await transaction.sign(privateKey);
-    console.log('DEBUG CHAT: chatService.ts - Executing transaction');
     const txResponse = await signedTx.execute(client);
-    console.log('DEBUG CHAT: chatService.ts - Getting receipt');
     await txResponse.getReceipt(client);
 
-    console.log(`DEBUG CHAT: chatService.ts - Recorded conversation to topic ${topicId} successfully`);
   } catch (error) {
-    console.error('DEBUG CHAT: chatService.ts - Error in recordConversationToTopic:', error);
-    console.error('Error recording conversation to topic:', error);
     throw error;
   }
 }
