@@ -153,6 +153,7 @@ cp .env.example .env
 Configure the following in your `.env` file:
 ```
 OPENAI_API_KEY=your_key_here
+PORT=3001
 HEDERA_NETWORK=testnet
 HEDERA_OPERATOR_ID=0.0.XXXXX
 HEDERA_OPERATOR_KEY=302e...
@@ -174,9 +175,13 @@ cp .env.example .env.local
 
 Configure the following in your `.env.local` file:
 ```
-NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+BACKEND_URL=http://localhost:3001
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=walletconnect_project_key
 NEXT_PUBLIC_HSUITE_TOKEN_ID=0.0.2203022
-NEXT_PUBLIC_MESSAGE_PRICE=1000
+NODE_ENV=development
+NEXT_PUBLIC_NEW_PROJECT_PRICE=50
+NEXT_PUBLIC_MESSAGE_PRICE=10
+LICENSE_IMAGE_URL='https://bafybeibhak25l3754uor4onzwqpeuq44wuhgxopi46e434q6quwija6g64.ipfs.w3s.link/ChatGPT%20Image%202%20de%20mai.%20de%202025%2C%2011%5F26%5F14.png'
 ```
 
 Start the frontend server:
