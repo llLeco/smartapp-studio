@@ -23,7 +23,7 @@ SmartApp Studio democratizes blockchain development by using generative AI and t
 ## 📌 Step-by-Step Video Walkthrough
 
 ### 1️⃣ Access SmartApp Studio
-- Visit [smartapp-studio.vercel.app](https://smartapp-studio-sgqp.vercel.app/)  
+- Visit [https://smartapp-studio-sgqp.vercel.app/](https://smartapp-studio-sgqp.vercel.app/)  
 - The landing page introduces the platform's core concepts and benefits  
 - Click **"Get Started"** to begin
 
