@@ -198,7 +198,6 @@ npm run dev
 - **License NFT Collection:** [0.0.5892772 (Testnet)](https://hashscan.io/testnet/token/0.0.5892772)
 - **License Main Topic:** [0.0.5940162 (Testnet)](https://hashscan.io/testnet/token/0.0.5940162)
 - **Project Topic:** [0.0.5940169 (Testnet)](https://hashscan.io/testnet/topic/0.0.5940169)
-- 
 - **HSUITE Token:** [0.0.2203022 (Testnet)](https://hashscan.io/testnet/token/0.0.2203022)
 
 ---
