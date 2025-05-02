@@ -189,6 +189,7 @@ npm run dev
 
 - **Demo Video:** [smartapp-studio.vercel.app](https://youtu.be/TQXTbXemG0s)
 - **Live Application:** [smartapp-studio.vercel.app](https://smartapp-studio.vercel.app)
+- **Project PitchDeck** [View Pitch Deck](./SmartApp_Studio_PitchDeck.pdf)
 - **License NFT Collection:** [0.0.5892772 (Testnet)](https://hashscan.io/testnet/token/0.0.5892772)
 - **HSUITE Token:** [0.0.2203022 (Testnet)](https://hashscan.io/testnet/token/0.0.2203022)
 
