@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useWallet } from '../../hooks/useWallet';
 import Head from 'next/head';
-import SubscriptionModal from '../../components/SubscriptionModal';
 import SubscriptionBanner from '../../components/SubscriptionBanner';
 import ProjectCreateModal from '../../components/ProjectCreateModal';
 import { getUserLicense, Project } from '../../services/licenseService';
@@ -106,25 +105,17 @@ const AppPage = () => {
       if (result.success && result.subscription) {
         console.log('Subscription details loaded:', result.subscription);
         
-        // Check if this is a new subscription (reset project limits)
         const isNewSubscription = result.active || false;
         
-        // Map the API subscription details to our frontend model
-        // When a new subscription is created, reset projectsUsed to 0
         const projectCount = isNewSubscription ? 0 : projects.length;
         const subscriptionInfo = mapSubscriptionToInfo(result.subscription, projectCount);
         
         setSubscription(subscriptionInfo);
         
-        // If this is a new subscription, update the projects display in the UI
         if (isNewSubscription) {
           console.log("New subscription detected - resetting projects used count to 0");
           
-          // Force update the UI without changing actual projects array
-          // This ensures the Create Project button is enabled
           setProjects(prevProjects => {
-            // Simply return the same array to maintain references
-            // but UI will reflect the projectsUsed=0 from subscription
             return [...prevProjects];
           });
         }
@@ -150,13 +141,13 @@ const AppPage = () => {
 
   const handleCreateProject = async (projectName: string) => {
     if (!accountId || !licenseInfo?.topicId) {
-      setProjectError('Conta ou licença não disponível. Verifique sua conexão.');
+      setProjectError('Account or license not available. Check your connection.');
       return;
     }
     
     // Check if subscription is active and project limit not reached
     if (!subscription?.active || subscription.projectsUsed >= subscription.projectLimit) {
-      setProjectError('Limite de projetos atingido ou assinatura inativa.');
+      setProjectError('Project limit reached or inactive subscription.');
       return;
     }
     
@@ -194,11 +185,11 @@ const AppPage = () => {
           }
         }
       } else {
-        setProjectError(result.error || 'Erro ao criar projeto');
+        setProjectError(result.error || 'Error creating project');
       }
     } catch (err: any) {
       console.error('Error creating project:', err);
-      setProjectError(err.message || 'Erro ao criar projeto');
+      setProjectError(err.message || 'Error creating project');
     } finally {
       setProjectLoading(false);
       setShowProjectCreateModal(false);
@@ -242,30 +233,21 @@ const AppPage = () => {
   };
   
   const handleSubscriptionConfirm = async (transactionId: string) => {
+    setRenewalLoading(true);
     try {
-      setRenewalLoading(true);
-      
-      // For both new and renewal subscriptions, just process the transaction ID
-      console.log('Subscription confirmed with transaction:', transactionId);
-      
-      // Simulate successful response
-      const success = true;
-      
-      if (success) {
-        // Refresh subscription details if we have a license topic
-        if (licenseInfo?.topicId) {
-          await fetchSubscriptionDetails(licenseInfo.topicId);
-        }
-        
-        // Hide any previous errors
-        setProjectError(null);
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      if (licenseInfo?.topicId) {
+        await fetchSubscriptionDetails(licenseInfo.topicId);
+        await fetchUserProjects(licenseInfo.topicId);
       }
+
     } catch (error: any) {
       console.error('Error processing subscription:', error);
       setProjectError(error.message || 'Error processing subscription');
     } finally {
       setRenewalLoading(false);
-      setShowSubscriptionModal(false);
     }
   };
 
@@ -275,7 +257,7 @@ const AppPage = () => {
   };
 
   if (!isConnected || !accountId) {
-    return null; // Não renderiza nada enquanto redireciona
+    return null;
   }
 
   return (
@@ -310,6 +292,7 @@ const AppPage = () => {
                         license={licenseInfo}
                         loading={loadingSubscription}
                         onPurchase={() => handlePurchaseSubscription(false)}
+                        onConfirm={handleSubscriptionConfirm}
                         isProcessing={projectLoading || renewalLoading}
                       />
                     </div>
@@ -512,14 +495,6 @@ const AppPage = () => {
           </main>
         </div>
       </div>
-      
-      {/* Subscription Modal */}
-      <SubscriptionModal
-        isOpen={showSubscriptionModal}
-        onClose={() => setShowSubscriptionModal(false)}
-        onConfirm={handleSubscriptionConfirm}
-        isRenewal={isRenewalMode}
-      />
       
       {/* Project Create Modal */}
       <ProjectCreateModal

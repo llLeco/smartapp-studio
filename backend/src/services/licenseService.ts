@@ -1,5 +1,5 @@
 import { AccountId, PrivateKey, TokenId, TokenMintTransaction, TopicId, TopicMessageSubmitTransaction, TransferTransaction } from "@hashgraph/sdk";
-import { getClient, getMirrorNodeUrl } from "./hederaService";
+import { getClient, getMirrorNodeUrl, getOperatorId } from "./hederaService";
 import { getTopicMessages } from "./topicService";
 
 export interface LicenseInfo {
@@ -17,6 +17,7 @@ export interface NftMetadata {
     creator?: string;
     createdAt?: string;
     type: string;
+    image?: string;
 }
 
 export const getUserLicense = async (accountId: string) => {
@@ -182,17 +183,22 @@ export const recordLicenseCreationMessage = async (
     }
 }
 
-export const transferLicense = async (tokenId: string, serialNumber: number, senderId: string, recipientId: string) => {
+export const transferLicense = async (tokenId: string, serialNumber: number, recipientId: string) => {
     try {
         const client = getClient();
+        const operatorId = getOperatorId();
         const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY!);
 
+        if (!operatorId || !operatorKey) {
+            throw new Error('Operator ID or key is not set');
+        }
+        
         // Create a transfer transaction
         const transaction = new TransferTransaction()
             .addNftTransfer(
                 TokenId.fromString(tokenId),
                 serialNumber,
-                AccountId.fromString(senderId),
+                AccountId.fromString(operatorId),
                 AccountId.fromString(recipientId)
             )
             .freezeWith(client);
@@ -206,12 +212,45 @@ export const transferLicense = async (tokenId: string, serialNumber: number, sen
             status: receipt.status.toString(),
             tokenId,
             serialNumber,
-            from: senderId,
+            from: operatorId,
             to: recipientId,
             transactionId: txResponse.transactionId.toString()
         };
     } catch (error) {
         console.error('Error transferring license:', error);
+        throw error;
+    }
+}
+
+export const transferHsuiteToken = async (tokenId: string, accountId: string) => {
+    try {
+        const client = getClient();
+        const operatorId = getOperatorId();
+        const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY!);
+
+        if (!operatorId || !operatorKey) {
+            throw new Error('Operator ID or key is not set');
+        }
+
+        // Create a transfer transaction
+        const transaction = new TransferTransaction()
+            .addTokenTransfer( TokenId.fromString(tokenId), AccountId.fromString(accountId), 2000000 )
+            .addTokenTransfer( TokenId.fromString(tokenId), AccountId.fromString(operatorId), -2000000 )
+            .freezeWith(client);
+
+        // Sign the transaction with the operator key
+        const signedTx = await transaction.sign(operatorKey);
+        const txResponse = await signedTx.execute(client);
+        const receipt = await txResponse.getReceipt(client);
+
+        return {
+            status: receipt.status.toString(),
+            tokenId,
+            accountId,
+            transactionId: txResponse.transactionId.toString()
+        };
+    } catch (error) {
+        console.error('Error transferring HSUITE token:', error);
         throw error;
     }
 }

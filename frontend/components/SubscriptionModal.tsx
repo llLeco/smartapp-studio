@@ -10,13 +10,17 @@ interface SubscriptionModalProps {
   onClose: () => void;
   onConfirm: (transactionId: string) => void;
   isRenewal?: boolean;
+  tokenId?: string;
+  receiverAccountId?: string;
 }
 
 const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
-  isRenewal = false
+  isRenewal = false,
+  tokenId,
+  receiverAccountId
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,81 +35,94 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [license, setLicense] = useState<any>(null);
   
-  // Subscription price in USD - from environment variable 
-  const subscriptionPriceUSD = parseInt(process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE || "20", 10);
+  const USD_PRICE = parseInt(process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE || '20', 10);
+  const HSUITE_PER_USD = parseInt(process.env.NEXT_PUBLIC_HSUITE_PER_USD || '1', 10);
+  const hsuiteAmount = USD_PRICE * HSUITE_PER_USD;
   
-  // Get conversion rate from environment variable or use default
-  const hsuitePerUSD = parseInt(process.env.NEXT_PUBLIC_HSUITE_PER_USD || "1", 10);
-  
-  // Calculate total HSuite tokens needed
-  const hsuiteAmount = subscriptionPriceUSD * hsuitePerUSD;
-  
-  // Set up the portal target
-  useEffect(() => {
-    if (typeof document !== 'undefined') {
-      setModalRoot(document.body);
+  // 1) Portal target
+useEffect(() => {
+  if (typeof document !== 'undefined') {
+    setModalRoot(document.body)
+  }
+}, [])
+
+// 2) Cleanup/reset whenever modal closes
+useEffect(() => {
+  if (!isOpen) {
+    // clear any stale state
+    setTransaction(null)
+    setError(null)
+    setIsSuccess(false)
+    setSubscriptionDetails(null)
+    setTokenDecimals(null)
+    setDisplayAmount('...')
+    isSubmitting.current = false
+  }
+}, [isOpen])
+
+// 3) Initialize data when modal opens
+useEffect(() => {
+  if (!isOpen) return
+
+  // reset before we start
+  setError(null)
+  setIsSuccess(false)
+  setSubscriptionDetails(null)
+  setTransaction(null)
+  setTokenDecimals(null)
+  setDisplayAmount('...')  
+  isSubmitting.current = false
+
+  ;(async () => {
+    if (!accountId) throw new Error('Account ID is required')
+
+    // 3a) get the user’s license
+    const lic = await getUserLicense(accountId)
+    setLicense(lic)
+
+    // 3b) fetch network config
+    const networkRes = await fetch('/api/hedera?type=network')
+    const networkData = await networkRes.json()
+    if (!networkData.success || !networkData.hsuiteTokenId) {
+      throw new Error('HSUITE Token ID not available')
     }
-  }, []);
-  
-  // Initialize token details and prepare transaction when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      const initialize = async () => {
-        try {
-          // Reset states
-          setTransaction(null);
-          setError(null);
-          setIsSuccess(false);
-          setSubscriptionDetails(null);
-          isSubmitting.current = false;
 
-          if (!accountId) {
-            throw new Error('Account ID is required');
-          }
+    // 3c) fetch decimals & set display amount
+    const details = await getTokenDetails(networkData.hsuiteTokenId)
+    setTokenDecimals(details.decimals)
+    setDisplayAmount(formatAmount(hsuiteAmount, details.decimals))
+  })().catch(err => {
+    console.error('init error:', err)
+    setError(err.message)
+  })
+}, [isOpen, accountId, hsuiteAmount])
 
-          const license = await getUserLicense(accountId);
-          setLicense(license);
+// 4) Build the payment transaction once we know decimals
+useEffect(() => {
+  if (!isOpen || tokenDecimals === null) return
 
-          const networkRes = await fetch('/api/hedera?type=network');
-          const networkData = await networkRes.json();
+  ;(async () => {
+    // assume networkData hasn’t changed; if you need it again, re-fetch or lift it into state
+    const networkRes = await fetch('/api/hedera?type=network')
+    const networkData = await networkRes.json()
 
-          console.log('Network data:', networkData, license, accountId);
+    const multiplier = 10 ** tokenDecimals
+    const amount = hsuiteAmount * multiplier
 
-          if (!networkData.success || !networkData.hsuiteTokenId) {
-            throw new Error('HSUITE Token ID not available');
-          }
+    const tx = await createPaymentTransaction(
+      networkData.hsuiteTokenId,
+      amount,
+      accountId!,
+      networkData.operatorId
+    )
+    setTransaction(tx)
+  })().catch(err => {
+    console.error('tx build error:', err)
+    setError(err.message)
+  })
+}, [isOpen, tokenDecimals, accountId, hsuiteAmount])
 
-          // Fetch token details if needed
-          if (!tokenDecimals && networkData.hsuiteTokenId) {
-            const details = await getTokenDetails(networkData.hsuiteTokenId);
-            setTokenDecimals(details.decimals);
-            setDisplayAmount(formatAmount(hsuiteAmount, details.decimals));
-          }
-          
-          // Prepare transaction if we have all required data
-          if (accountId && networkData.operatorId && networkData.hsuiteTokenId && tokenDecimals !== null) {
-            const multiplier = Math.pow(10, tokenDecimals);
-            const transactionAmount = hsuiteAmount * multiplier;
-            
-            const tx = await createPaymentTransaction(
-              networkData.hsuiteTokenId,
-              transactionAmount,
-              accountId,
-              networkData.operatorId
-            );
-            
-            setTransaction(tx);
-          }
-        } catch (err: any) {
-          console.error('Error initializing modal:', err);
-          setError(err.message || 'Failed to initialize payment');
-        }
-      };
-      
-      initialize();
-    }
-  }, [isOpen, accountId, tokenDecimals, hsuiteAmount]);
-  
+
   // Format amount with proper decimals
   const formatAmount = (amount: number, decimals: number): string => {
     if (decimals === 0) return amount.toString();
@@ -142,7 +159,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         periodMonths: 1,
         projectLimit: 3,
         messageLimit: 100,
-        priceUSD: subscriptionPriceUSD,
+        priceUSD: USD_PRICE,
         priceHSuite: hsuiteAmount
       };
       
@@ -181,11 +198,12 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   };
   
   const handleClose = () => {
+    onClose()
     if (isSuccess && transactionId) {
-      onConfirm(transactionId);
+      onConfirm(transactionId)
     }
-    onClose();
-  };
+  }
+  
   
   if (!isOpen || !modalRoot) return null;
   
@@ -263,7 +281,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                       </svg>
                       <span className="font-medium">Price:</span>
                     </div>
-                    <span className="font-medium text-white">${subscriptionPriceUSD}.00 USD</span>
+                    <span className="font-medium text-white">${USD_PRICE}.00 USD</span>
                   </li>
                   <li className="flex justify-between">
                     <div className="flex items-center">

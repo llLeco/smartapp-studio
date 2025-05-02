@@ -103,7 +103,8 @@ const MessagePaymentModal: React.FC<MessagePaymentModalProps> = ({
         receiverAccountId
       );
       
-      setTransaction(tx);
+      //TODO: Implement this
+      // setTransaction(tx);
       
       console.log(`Prepared transaction for ${FIXED_MESSAGE_COUNT} messages`);
     } catch (err: any) {

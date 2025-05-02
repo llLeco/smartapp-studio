@@ -21,6 +21,7 @@ export interface NftMetadata {
   creator?: string;
   createdAt?: string;
   type: string;
+  image?: string;
 }
 
 export interface NftInfo {
@@ -212,9 +213,7 @@ export async function mintLicenseToken(
 /**
  * Associates a license token with an account
  */
-export async function associateLicenseToken(
-  accountId: string
-): Promise<{ success: boolean } | { error: string }> {
+export async function associateLicenseToken(accountId: string) {
   try {
     //get license token id from backend
     const licenseTokenIdRes = await fetch('/api/hedera?type=licensetokenid');
@@ -232,29 +231,66 @@ export async function associateLicenseToken(
     }
 
     console.log(`Associating token ${licenseTokenId} with ${accountId} via WalletConnect`);
-
-    const signer = await getSigner();
-    const client = getClient();
-    
-    const transaction = new TokenAssociateTransaction()
-      .setAccountId(accountId)
-      .setTokenIds([licenseTokenId])
-      .setMaxTransactionFee(new Hbar(1));
-
-    const signedTokenTx = await freezeAndSign(transaction, signer, client);
-    const tokenReceipt = await (await signedTokenTx.execute(client)).getReceipt(client);
-    
-    console.log("✅ Token associated successfully");
-    return { success: true };
+    const result = await associateToken(accountId, licenseTokenId);
+    return result;
   } catch (err: any) {
-    // handle already‑associated error gracefully
     if (err.message && err.message.includes("TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT") || 
         err.message && err.message.includes("ALREADY_ASSOCIATED")) {
       console.log("Token already associated, continuing to next step");
       return { success: true };
     }
-    console.error("Error in associateLicenseToken:", err);
     return { error: err.message };
+  }
+}
+
+export async function associateHsuiteToken(accountId: string) {
+  try {
+    //get license token id from backend
+    const hsuiteTokenIdRes = await fetch('/api/hedera?type=hsuitetokenid');
+    const hsuiteTokenIdData = await hsuiteTokenIdRes.json();
+    const hsuiteTokenId = hsuiteTokenIdData.tokenId;
+
+    if (!accountId || !hsuiteTokenId) {
+      throw new Error("Missing required data for token association");
+    }
+
+    const alreadyAssociated = await isTokenAssociated(accountId, hsuiteTokenId);
+    if (alreadyAssociated) {
+      console.log("Token already associated, skipping association");
+      return { success: true };
+    }
+
+    const result = await associateToken(accountId, hsuiteTokenId);
+    return result;
+  } catch (err: any) {
+    if (err.message && err.message.includes("TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT") || 
+        err.message && err.message.includes("ALREADY_ASSOCIATED")) {
+      console.log("Token already associated, continuing to next step");
+      return { success: true };
+    }
+
+    return { error: err.message };
+  }
+}
+
+async function associateToken(accountId: string, tokenId: string): Promise<{ success: boolean, tokenReceipt?: any, error?: string }> {
+  try {
+    const signer = await getSigner();
+    const client = getClient();
+      
+    const transaction = new TokenAssociateTransaction()
+      .setAccountId(accountId)
+      .setTokenIds([tokenId])
+      .setMaxTransactionFee(new Hbar(1));
+
+    const signedTokenTx = await freezeAndSign(transaction, signer, client);
+    const tokenReceipt = await (await signedTokenTx.execute(client)).getReceipt(client);
+    
+    console.log("✅ Token associated successfully", tokenReceipt);
+    return { success: true, tokenReceipt };
+  } catch (error: any) {
+    console.error("Error in associateToken:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -335,26 +371,13 @@ export async function transferLicenseToken(
       console.log(`Using fallback serial number: ${serialNumber}`);
     }
 
-    // Get the operator ID from backend for treasury account
-    const operatorRes = await fetch('/api/hedera?type=network');
-    const operatorData = await operatorRes.json();
-
-    if (!operatorData.success || !operatorData.operatorId) {
-      throw new Error('Operator ID not available');
-    }
-    
-    let operatorId = operatorData.operatorId;
-    
-    console.log(`Using operator ID: ${operatorId} for transfer`);
-
     // Call the backend transferLicense endpoint
-    const res = await fetch("/api/license?action=transfer", {
+    const res = await fetch("/api/license?action=transferLicense", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tokenId,
         serialNumber,
-        senderId: operatorId,
         recipientId: accountId
       }),
     });
@@ -410,108 +433,74 @@ export async function transferLicenseToken(
 }
 
 /**
- * Verify if a user owns a specific token using mirror node
+ * Transfers a HSUITE token to the user
  */
-async function verifyTokenOwnership(
-  accountId: string, 
-  tokenId: string, 
-  serialNumber: number
-): Promise<{ owned: boolean }> {
+export async function transferHsuiteToken(
+  tokenId: string,
+  accountId: string
+): Promise<{ status: string } | { error: string }> {
   try {
-    console.log(`Verifying token ownership: accountId=${accountId}, tokenId=${tokenId}, serialNumber=${serialNumber}`);
+    console.log(`Transferring HSUITE token: tokenId=${tokenId}, to accountId=${accountId}`);
+
+    if (!accountId || !tokenId) {
+      throw new Error("Missing required data for transfer");
+    }
+
+    const res = await fetch("/api/license?action=transferHsuite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tokenId,
+        accountId
+      }),
+    });
+
+    if (!res.ok) {
+      console.error(`Transfer HSUITE token API returned status: ${res.status}`);
+      return { error: `API error: ${res.status}` };
+    }
+
+    const responseData = await res.json();
+    console.log('Transfer HSUITE token response:', responseData);
     
-    // Clean up the accountId format if needed (ensure it's in 0.0.XXXXX format)
-    const cleanAccountId = accountId.includes('.') ? accountId : `0.0.${accountId}`;
+    const { success, result, error } = responseData;
     
-    // Query the mirror node API to check if the account has this token
-    const url = `${MIRROR_NODE_URL}/api/v1/accounts/${cleanAccountId}/tokens?token.id=${tokenId}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      console.error(`Mirror node error: ${response.status}`);
-      return { owned: false };
+    if (!success) {
+      console.error('Transfer HSUITE token failed:', error || 'Unknown error');
+      return { error: error || "HSUITE token transfer failed" };
     }
     
-    const data = await response.json();
-    console.log('Token ownership data:', data);
-    
-    // Check if the token is in the list
-    if (data.tokens && data.tokens.length > 0) {
-      // Find the specific token
-      const token = data.tokens.find((t: any) => t.token_id === tokenId);
-      if (token) {
-        console.log(`User owns token ${tokenId}`);
-        return { owned: true };
-      }
-    }
-    
-    // As a fallback, try to check NFT info directly
-    try {
-      const nftUrl = `${MIRROR_NODE_URL}/api/v1/tokens/${tokenId}/nfts/${serialNumber}`;
-      const nftResponse = await fetch(nftUrl);
-      
-      if (nftResponse.ok) {
-        const nftData = await nftResponse.json();
-        console.log('NFT ownership data:', nftData);
-        
-        if (nftData.account_id === cleanAccountId) {
-          console.log(`NFT ${tokenId}:${serialNumber} is owned by ${cleanAccountId}`);
-          return { owned: true };
-        }
-      }
-    } catch (nftError) {
-      console.error('Error checking NFT ownership:', nftError);
-    }
-    
-    console.log(`User does not own token ${tokenId} or NFT ${serialNumber}`);
-    return { owned: false };
-  } catch (error) {
-    console.error('Error verifying token ownership:', error);
-    return { owned: false };
+    return { status: result.status };
+  } catch (e: any) {
+    console.error('Error in transferHsuiteToken:', e);
+    return { error: e.message };
   }
 }
 
-// convenience: all‑in‑one flow for license creation
-export async function createLicenseNft(
-  metadata: NftMetadata
-): Promise<NftInfo> {
-  // Step 1: Prepare metadata and get account ID
-  const { accountId, fullMetadata } = await prepareMetadata(metadata);
-
-  console.log(`Account ID: ${accountId}`);
-  console.log(`Full metadata: ${JSON.stringify(fullMetadata)}`);
-  
-  // Step 2: Create license topic
-  const topicResult = await createLicenseTopic(fullMetadata);
-  if ('error' in topicResult) throw new Error(topicResult.error);
-  const { topicId, tokenId } = topicResult;
-  
-  // Step 3: Mint license token
-  const mintResult = await mintLicenseToken(tokenId, topicId);
-  if ('error' in mintResult) throw new Error(mintResult.error);
-  const { serialNumber } = mintResult;
-  
-  // Step 4: Associate license token
-  const associateResult = await associateLicenseToken(accountId);
-  if ('error' in associateResult) throw new Error(associateResult.error);
-  
-  // Step 5: Record license message
-  const messageResult = await recordLicenseMessage(topicId, tokenId, serialNumber, fullMetadata);
-  if ('error' in messageResult) throw new Error(messageResult.error);
-  
-  // Step 6: Transfer license token
-  const transferResult = await transferLicenseToken(tokenId, serialNumber, accountId);
-  if ('error' in transferResult) throw new Error(transferResult.error);
-  
-  return {
-    tokenId,
-    serialNumber,
-    topicId,
-    metadata: fullMetadata,
-  };
+/**
+ * Verifies token ownership through mirror node
+ */
+async function verifyTokenOwnership(accountId: string, tokenId: string, serialNumber: number): Promise<{ owned: boolean }> {
+  try {
+    const url = `${MIRROR_NODE_URL}/api/v1/accounts/${accountId}/tokens?token.id=${tokenId}&token.serialNumber=${serialNumber}`;
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Mirror node error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    // If tokens array has any entries, the account owns the token
+    return { owned: (data.tokens && data.tokens.length > 0) };
+  } catch (error) {
+    console.error('Error verifying token ownership:', error);
+    throw error;
+  }
 }
 
-// check validity now via a single backend call
+/**
+ * Get user license information
+ */
 export async function getUserLicense(accountId: string) {
   try {
     console.log(`Checking license for account ID: ${accountId}`);

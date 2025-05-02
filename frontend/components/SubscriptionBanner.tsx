@@ -18,6 +18,7 @@ interface SubscriptionBannerProps {
   license: any;
   loading: boolean;
   onPurchase: (tokenId?: string, receiverAccountId?: string) => void;
+  onConfirm: (transactionId: string) => void;
   isProcessing: boolean;
 }
 
@@ -30,6 +31,7 @@ const SubscriptionBanner: React.FC<SubscriptionBannerProps> = ({
   subscription,
   loading,
   onPurchase,
+  onConfirm,
   isProcessing
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,12 +46,17 @@ const SubscriptionBanner: React.FC<SubscriptionBannerProps> = ({
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    setSelectedTokenId(null);
+    setReceiverAccountId(null);
   };
-
-  const handleConfirmPayment = () => {
-    if (selectedTokenId && receiverAccountId && onPurchase) {
+  
+  const handleConfirmPayment = (transactionId: string) => {
+    if (selectedTokenId && receiverAccountId) {
       onPurchase(selectedTokenId, receiverAccountId);
+      onConfirm(transactionId);
       setIsModalOpen(false);
+      setSelectedTokenId(null);
+      setReceiverAccountId(null);
     }
   };
 
@@ -150,7 +157,10 @@ const SubscriptionBanner: React.FC<SubscriptionBannerProps> = ({
       {/* Subscription Modal */}
       {isModalOpen && selectedTokenId && receiverAccountId && (
         <SubscriptionModal
+          key={`${selectedTokenId}-${receiverAccountId}`}    // ← force full remount
           isOpen={isModalOpen}
+          tokenId={selectedTokenId}
+          receiverAccountId={receiverAccountId}
           onClose={handleCloseModal}
           onConfirm={handleConfirmPayment}
         />

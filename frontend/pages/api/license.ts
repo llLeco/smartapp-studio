@@ -45,8 +45,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         case 'record':
           endpoint = `${backendUrl}/api/license/record`;
           break;
-        case 'transfer':
-          endpoint = `${backendUrl}/api/license/transfer`;
+        case 'transferLicense':
+          endpoint = `${backendUrl}/api/license/transferLicense`;
+          break;
+        case 'transferHsuite':
+          endpoint = `${backendUrl}/api/license/transferHsuite`;
           break;
         default:
           return res.status(400).json({ error: 'Invalid action' });

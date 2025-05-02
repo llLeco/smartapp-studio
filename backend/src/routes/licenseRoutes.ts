@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { getUserLicense, mintLicenseToken, recordLicenseCreationMessage, transferLicense } from '../services/licenseService';
+import { getUserLicense, mintLicenseToken, recordLicenseCreationMessage, transferHsuiteToken, transferLicense } from '../services/licenseService';
 import { NftMetadata } from '../services/licenseService';
 
 const router = express.Router();
@@ -128,9 +128,9 @@ router.post('/record', async (req: Request, res: Response) => {
 });
 
 // Route to transfer a license
-router.post('/transfer', async (req: Request, res: Response) => {
+router.post('/transferLicense', async (req: Request, res: Response) => {
   try {
-    const { tokenId, serialNumber, senderId, recipientId } = req.body;
+    const { tokenId, serialNumber, recipientId } = req.body;
     
     if (!tokenId) {
       return res.status(400).json({ 
@@ -146,13 +146,6 @@ router.post('/transfer', async (req: Request, res: Response) => {
       });
     }
     
-    if (!senderId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Sender account ID is required' 
-      });
-    }
-    
     if (!recipientId) {
       return res.status(400).json({ 
         success: false, 
@@ -160,10 +153,10 @@ router.post('/transfer', async (req: Request, res: Response) => {
       });
     }
     
-    console.log(`Transferring license ${tokenId}:${serialNumber} from ${senderId} to ${recipientId}`);
+    console.log(`Transferring license ${tokenId}:${serialNumber} to ${recipientId}`);
     
     // Transfer the license
-    const result = await transferLicense(tokenId, serialNumber, senderId, recipientId);
+    const result = await transferLicense(tokenId, serialNumber, recipientId);
     
     return res.status(200).json({ 
       success: true, 
@@ -177,5 +170,44 @@ router.post('/transfer', async (req: Request, res: Response) => {
     });
   }
 });
+
+// Route to transfer a HSUITE token
+router.post('/transferHsuite', async (req: Request, res: Response) => {
+  try {
+    const { tokenId, accountId } = req.body;
+
+    if (!tokenId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Token ID is required' 
+      });
+    }
+
+    if (!accountId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Account ID is required' 
+      });
+    }
+
+    console.log(`Transferring HSUITE token ${tokenId} to ${accountId}`);
+
+    // Transfer the HSUITE token
+    const result = await transferHsuiteToken(tokenId, accountId);
+    
+    return res.status(200).json({ 
+      success: true, 
+      result 
+    });
+  } catch (error: any) {
+    console.error('Error transferring HSUITE token:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to transfer HSUITE token' 
+    });
+  }
+});
+
+    
 
 export default router; 

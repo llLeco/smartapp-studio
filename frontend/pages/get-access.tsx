@@ -13,6 +13,7 @@ interface NftMetadata {
   creator?: string;
   createdAt?: string;
   type: string;
+  image?: string;
 }
 
 interface LicenseInfo {
@@ -158,21 +159,22 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, activeS
         </span>
       </div>
       
+      {/* License image */}
+      {(
+        <div className="mt-4 flex justify-center">
+          <img 
+            src={'https://bafybeibhak25l3754uor4onzwqpeuq44wuhgxopi46e434q6quwija6g64.ipfs.w3s.link/ChatGPT%20Image%202%20de%20mai.%20de%202025%2C%2011%5F26%5F14.png'} 
+            alt="License NFT" 
+            className="w-full max-w-[200px] h-auto rounded-lg border border-gray-600"
+          />
+        </div>
+      )}
+      
       {/* License details */}
       <div className="mt-4 grid gap-3">
         <div className="flex justify-between">
-          <span className="text-gray-400">Token ID:</span>
-          <span className="text-white font-mono">{licenseInfo.tokenId}</span>
-        </div>
-        
-        <div className="flex justify-between">
-          <span className="text-gray-400">Serial Number:</span>
-          <span className="text-white font-mono">{licenseInfo.serialNumber}</span>
-        </div>
-        
-        <div className="flex justify-between">
-          <span className="text-gray-400">Type:</span>
-          <span className="text-white">{licenseInfo.metadata?.type || 'Standard'}</span>
+          <span className="text-gray-400">License NFT ID:</span>
+          <span className="text-white font-mono">{licenseInfo.tokenId}:{licenseInfo.serialNumber}</span>
         </div>
         
         <div className="flex justify-between">
@@ -186,28 +188,6 @@ const AccessCard: React.FC<AccessCardProps> = ({ licenseInfo, accountId, activeS
           {accountId ? `Connected as: ${accountId}` : 'Not connected'}
         </p>
       </div>
-      
-      {/* {activeSessions.length > 0 && (
-        <div className="mt-4">
-          <h4 className="text-sm font-medium text-white mb-2">Active sessions:</h4>
-          <div className="space-y-2">
-            {activeSessions.map((session) => (
-              <div key={session.topic} className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded">
-                <div>
-                  <p className="text-xs text-gray-300">{session.accountId}</p>
-                  <p className="text-xs text-gray-500">{session.network}</p>
-                </div>
-                <button
-                  onClick={() => onDisconnect(session.topic)}
-                  className="text-xs px-2 py-1 bg-red-900/30 hover:bg-red-800/50 text-red-300 rounded transition-colors"
-                >
-                  Disconnect
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )} */}
     </div>
   );
 };
@@ -296,14 +276,29 @@ const GetAccessPage = () => {
       description: 'Creating and minting your license token' 
     },
     { 
-      key: 'associateToken', 
-      title: 'Associating Token', 
-      description: 'Associating token to your account' 
+      key: 'associateLicenseToken', 
+      title: 'Associating License Token', 
+      description: 'Associating license token to your account' 
     },
     { 
-      key: 'complete', 
+      key: 'receiveNft', 
       title: 'Receiving NFT', 
       description: 'Recording license in your wallet' 
+    },
+    {
+      key: 'associateHsuiteToken',
+      title: 'Associating HSUITE Token',
+      description: 'Associating HSUITE token to your account'
+    },
+    {
+      key: 'receiveHsuiteTokens',
+      title: 'Receiving 200 HSUITEs',
+      description: 'Receiving 200 HSUITEs in your wallet'
+    },
+    {
+      key: 'complete',
+      title: 'Complete',
+      description: 'License and HSUITE NFT associated successfully'
     }
   ];
 
@@ -413,68 +408,147 @@ const GetAccessPage = () => {
             ...prev,
             serialNumber
           }));
+
+          console.log("License process data:", licenseProcessData);
           
-          // Move to associateToken step
-          setCurrentStep('associateToken');
+          // Move to associateLicenseToken step
+          setCurrentStep('associateLicenseToken');
           setCurrentStepIndex(1);
           setStepStatus('pending');
           break;
         }
         
-        case 'associateToken': {
+        case 'associateLicenseToken': {
           // Check if we have the minimum required data
-          if (!licenseProcessData.topicId || !licenseProcessData.tokenId) {
+          if (!licenseProcessData.tokenId) {
             console.error("Missing required license data:", licenseProcessData);
-            throw new Error("Missing topic ID or token ID for license");
+            throw new Error("Missing token ID for license");
           }
 
           // Log what we have before proceeding
           console.log("License data for association step:", licenseProcessData);
           
-          // Step 4: Associate token
-          console.log("Starting token association...");
+          // Associate license token
+          console.log("Starting license token association...");
           const associateResult = await licenseService.associateLicenseToken(accountId);
           
           if ('error' in associateResult) {
             console.error("Error associating token:", associateResult.error);
-            throw new Error(`Failed to associate token: ${associateResult.error}`);
+            throw new Error(`Failed to associate license token: ${associateResult.error}`);
           }
           
-          // For the record license message step, use a fallback serial number if needed
-          const serialNumber = licenseProcessData.serialNumber || 1; // Fallback to 1 if undefined
-          
-          // Step 5: Record license message
-          console.log("Recording license message with serial number:", serialNumber);
-          const messageResult = await licenseService.recordLicenseMessage(
-            licenseProcessData.topicId,
-            licenseProcessData.tokenId,
-            serialNumber,
-            {
-              name: 'SmartApp License',
-              description: 'Access license for SmartApp Studio',
-              type: 'LICENSE',
-              creator: accountId,
-              createdAt: new Date().toISOString()
-            }
-          );
-          
-          if ('error' in messageResult) {
-            console.error("Error recording license message:", messageResult.error);
-            throw new Error(`Failed to record license message: ${messageResult.error}`);
-          }
-          
-          // Move to the final step, which we'll handle differently
-          setCurrentStep('complete');
+          // Move to receiveNft step
+          setCurrentStep('receiveNft');
           setCurrentStepIndex(2);
           setStepStatus('pending');
-          
-          // Immediately process the complete step
-          await handleCompleteStep(serialNumber);
           break;
         }
         
-        case 'complete': {
-          // This should be handled by handleCompleteStep
+        case 'receiveNft': {
+
+          if (!licenseProcessData.tokenId || !licenseProcessData.topicId || !licenseProcessData.serialNumber) {
+            throw new Error("Missing required license data for token transfer");
+          }
+          
+          // Step: Transfer license token
+          console.log("Transferring license token...");
+          const transferResult = await licenseService.transferLicenseToken(
+            licenseProcessData.tokenId,
+            licenseProcessData.serialNumber || 1,
+            accountId || ''
+          );
+    
+          console.log("transferResult", transferResult);
+          
+          if ('error' in transferResult) {
+            // If error is not related to the user already owning the token,
+            // we'll show a warning but still continue
+            console.warn("License transfer encountered an issue:", transferResult.error);
+            console.log("Continuing process as license has been recorded in topic");
+          } else {
+            console.log(`License transfer successful with status: ${transferResult.status}`);
+          }
+          
+          setStepStatus('success');
+          
+          // Check license after all steps
+          const license = await licenseService.getUserLicense(accountId || '');
+          if (license) {
+            setLicenseInfo(license);
+            console.log("License verified and loaded successfully");
+          } else {
+            console.log("License not found by getUserLicense, but creation was successful");
+            
+            // Create a manual license info object since the getUserLicense might not find it immediately
+            setLicenseInfo({
+              tokenId: licenseProcessData.tokenId,
+              serialNumber: licenseProcessData.serialNumber,
+              topicId: licenseProcessData.topicId,
+              metadata: {
+                name: 'SmartApp License',
+                description: 'Access license for SmartApp Studio',
+                type: 'LICENSE',
+                creator: accountId || '',
+                createdAt: new Date().toISOString(),
+              },
+              ownerId: accountId || ''
+            });
+          }
+          
+          // Show success message to the user
+          setError(''); // Clear any previous errors
+
+          setCurrentStep('associateHsuiteToken');
+          setCurrentStepIndex(3);
+          setStepStatus('pending');
+          break;
+        }
+
+        case 'associateHsuiteToken': {
+          // Associate HSUITE token
+          console.log("Starting HSUITE token association...");
+          const associateResult = await licenseService.associateHsuiteToken(accountId);
+          
+          if ('error' in associateResult) {
+            console.error("Error associating HSUITE token:", associateResult.error);
+            throw new Error(`Failed to associate HSUITE token: ${associateResult.error}`);
+          }
+          
+          // Move to receiveHsuiteTokens step
+          setCurrentStep('receiveHsuiteTokens');
+          setCurrentStepIndex(4);
+          setStepStatus('pending');
+          break;
+        }
+
+        case 'receiveHsuiteTokens': {
+          // Get HSUITE token ID
+          const hsuiteTokenIdRes = await fetch('/api/hedera?type=hsuitetokenid');
+          const hsuiteTokenIdData = await hsuiteTokenIdRes.json();
+          const hsuiteTokenId = hsuiteTokenIdData.tokenId;
+
+          if (!hsuiteTokenId) {
+            throw new Error("Failed to get HSUITE token ID");
+          }
+
+          // Transfer HSUITE token
+          console.log("Transferring HSUITE token...");
+          const transferResult = await licenseService.transferHsuiteToken(
+            hsuiteTokenId,
+            accountId
+          );
+          
+          if ('error' in transferResult) {
+            console.error("Error transferring HSUITE token:", transferResult.error);
+            throw new Error(`Failed to transfer HSUITE token: ${transferResult.error}`);
+          }
+          
+          // Move to complete step
+          setCurrentStep('complete');
+          setCurrentStepIndex(5);
+          setStepStatus('pending');
+
+          await handleCompleteStep();
           break;
         }
       }
@@ -496,69 +570,8 @@ const GetAccessPage = () => {
   };
 
   // Separate function to handle the complete step
-  const handleCompleteStep = async (serialNumber: number) => {
+  const handleCompleteStep = async () => {
     try {
-      setLoading(true);
-      
-      // We'll perform token transfer and ownership verification
-      console.log("Processing final license step...");
-      
-      // Make sure we have all the required data
-      if (!licenseProcessData.tokenId || !licenseProcessData.topicId) {
-        throw new Error("Missing required license data for token transfer");
-      }
-      
-      // Step 6: Transfer license token
-      console.log("Transferring license token...");
-      const transferResult = await licenseService.transferLicenseToken(
-        licenseProcessData.tokenId,
-        serialNumber,
-        accountId || ''
-      );
-      
-      if ('error' in transferResult) {
-        // If error is not related to the user already owning the token,
-        // we'll show a warning but still continue
-        console.warn("License transfer encountered an issue:", transferResult.error);
-        console.log("Continuing process as license has been recorded in topic");
-      } else {
-        console.log(`License transfer successful with status: ${transferResult.status}`);
-      }
-      
-      // Consider the process successful at this point
-      console.log("License creation process completed successfully");
-      
-      // Update UI to show success
-      setStepStatus('success');
-      
-      // Check license after all steps
-      const license = await licenseService.getUserLicense(accountId || '');
-      if (license) {
-        setLicenseInfo(license);
-        console.log("License verified and loaded successfully");
-      } else {
-        console.log("License not found by getUserLicense, but creation was successful");
-        
-        // Create a manual license info object since the getUserLicense might not find it immediately
-        setLicenseInfo({
-          tokenId: licenseProcessData.tokenId,
-          serialNumber: serialNumber,
-          topicId: licenseProcessData.topicId,
-          metadata: {
-            name: 'SmartApp License',
-            description: 'Access license for SmartApp Studio',
-            type: 'LICENSE',
-            creator: accountId || '',
-            createdAt: new Date().toISOString()
-          },
-          ownerId: accountId || ''
-        });
-      }
-      
-      // Show success message to the user
-      setError(''); // Clear any previous errors
-      
-      // Redirect to app after successful license creation
       setTimeout(() => {
         router.push('/app');
       }, 2000);
@@ -566,8 +579,6 @@ const GetAccessPage = () => {
       console.error('Error in complete step:', err);
       setStepStatus('error');
       setStepError(err.message || 'Error completing license creation');
-    } finally {
-      setLoading(false);
     }
   };
 
