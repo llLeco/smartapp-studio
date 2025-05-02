@@ -20,6 +20,54 @@ SmartApp Studio is an AI-assisted platform that revolutionizes the development o
 **Why It Matters:**
 SmartApp Studio democratizes blockchain development by using generative AI and the HCS-10 protocol to guide developers through the process of creating decentralized applications, automatically generating project structures, NFT schemas, and functional base code.
 
+## 📌 Step-by-Step Video Walkthrough
+
+### 1️⃣ Access SmartApp Studio
+- Visit [smartapp-studio.vercel.app](https://smartapp-studio.vercel.app)  
+- The landing page introduces the platform's core concepts and benefits  
+- Click **"Get Started"** to begin
+
+---
+
+### 2️⃣ Connect Your Wallet
+- Click the **"Connect Wallet"** button (bottom-right corner)  
+- Choose your preferred wallet (e.g., HashPack, KabilaWallet)  
+- Approve the connection request in your wallet  
+- Once connected, your wallet address appears in the navigation bar
+
+---
+
+### 3️⃣ Mint Your NFT License
+- Navigate to the **"Account"** page  
+- Begin the **Get License** flow  
+- Approve the token association transaction  
+- Receive both your **License NFT** and **test HSuite tokens**  
+- This NFT acts as your identity and access credential in the ecosystem
+
+---
+
+### 4️⃣ Subscribe to a Plan
+- Go to the **"Projects"** page  
+- Open the subscription modal and click **"Subscribe"**  
+- Confirm the HSuite token payment in your wallet  
+- Your subscription status updates immediately, unlocking access to the AI assistant
+
+---
+
+### 5️⃣ Create Your First Project
+- In the **"Projects"** section, click **"New Project"**  
+- Enter a name for your SmartApp  
+- Click **"Create"** — your project is initialized and saved on-chain via HCS
+
+---
+
+### 6️⃣ Interact with the AI Assistant
+- Open your newly created project  
+- Describe your app idea (e.g., *"a token-gated community platform"*)  
+- The AI assistant will ask clarifying questions and generate SmartNode-compatible validator logic  
+- Review the config and logic generated for your SmartApp  
+- All interactions are logged on the Hedera network using the **HCS-10 protocol**
+
 ## 📌 How Hedera is Used
 
 ### Hedera Token Service (HTS)
@@ -136,68 +184,13 @@ Start the frontend server:
 npm run dev
 ```
 
-### Wallet Connection
-1. Install HashPack, Blade, or other Hedera-compatible wallet
-2. Connect your wallet using the "Connect Wallet" button
-3. Approve the connection in your wallet extension
-
-### Using SmartApp Studio
-1. **Mint License NFT**
-   - After connecting your wallet, go to the "Account" page
-   - Click "Get License" to mint your SmartApp Studio license
-
-2. **Subscribe to Service**
-   - Go to the "Subscriptions" page
-   - Choose a subscription plan and approve the HSUITE token payment
-   - Your subscription will be recorded on the Hedera network
-
-3. **Create Project**
-   - Navigate to "Projects"
-   - Click "New Project" and enter project details
-
-4. **Use Assistant**
-   - Open your project and navigate to the chat interface
-   - Ask questions or describe the SmartApp you want to build
-   - The AI will generate code, structures, and guidance
-
-## 📌 Demo Walkthrough
-
-Follow these steps to experience SmartApp Studio:
-
-1. **Connect Wallet**
-   - Click "Connect Wallet" button in the top-right corner
-   - Approve the connection in your Hedera wallet
-
-2. **Get a License**
-   - Navigate to "Account" page
-   - Click "Get License" to mint your NFT license
-   - Approve the transaction in your wallet
-
-3. **Purchase a Subscription**
-   - Go to "Subscriptions" 
-   - Select a plan and confirm the HSUITE token payment
-   - Your subscription will be recorded on the Hedera network
-
-4. **Create a Project**
-   - Navigate to "Projects" 
-   - Click "New Project"
-   - Enter a name and description for your SmartApp
-
-5. **AI Assistant Interaction**
-   - In your project, describe the app you want to build
-   - The AI will provide code, structure, and guidance
-   - All conversations are stored in your project's HCS topic
-
-6. **View HCS Records**
-   - Navigate to "Account" > "License Details"
-   - Click "View on HashScan" to see your topic messages
-
 ## 📌 Deployment Links
 
-- **Main HCS Topic:** [0.0.XXXXX (Testnet)](https://hashscan.io/testnet/topic/0.0.XXXXX)
-- **HSUITE Token:** [0.0.2203022 (Testnet)](https://hashscan.io/testnet/token/0.0.2203022)
-- **License NFT Collection:** [0.0.XXXXX (Testnet)](https://hashscan.io/testnet/token/0.0.XXXXX)
+
+- **Demo Video:** [smartapp-studio.vercel.app](https://youtu.be/TQXTbXemG0s)
 - **Live Application:** [smartapp-studio.vercel.app](https://smartapp-studio.vercel.app)
+- **License NFT Collection:** [0.0.5892772 (Testnet)](https://hashscan.io/testnet/token/0.0.5892772)
+- **HSUITE Token:** [0.0.2203022 (Testnet)](https://hashscan.io/testnet/token/0.0.2203022)
 
 ---
 
