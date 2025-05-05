@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
-import { getUserLicense, mintLicenseToken, recordLicenseCreationMessage, transferHsuiteToken, transferLicense } from '../services/licenseService';
-import { NftMetadata } from '../services/licenseService';
+import { getUserLicense, mintLicenseToken, recordLicenseCreationMessage, transferHsuiteToken, transferLicense } from '../services/licenseService.js';
+import { NftMetadata } from '../services/licenseService.js';
 
 const router = express.Router();
 

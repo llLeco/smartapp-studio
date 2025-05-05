@@ -18,10 +18,23 @@ interface Message {
 // Interface for messages from the Hedera topic
 interface TopicMessage {
   id: string;
-  question: string;
-  answer: string;
+  question?: string;
+  answer?: string;
   timestamp: string;
   usageQuota?: number;
+  // HCS-10 OpenConvai message format fields
+  type?: string;
+  input?: {
+    message: string;
+  };
+  output?: {
+    message: string;
+  };
+  metadata?: {
+    timestamp?: string;
+    project?: string;
+    usageQuota?: number;
+  };
 }
 
 // Interface for pinned items
@@ -40,6 +53,41 @@ export interface ChatProps {
   generatedStructure: string | null;
   setPinnedItems?: (items: PinnedItem[]) => void;
 }
+
+const HCS10InfoTooltip = () => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  
+  return (
+    <div className="relative inline-block">
+      <button 
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        onClick={() => setShowTooltip(!showTooltip)}
+        className="text-indigo-400 hover:text-indigo-300 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </button>
+      
+      {showTooltip && (
+        <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-lg">
+          <p className="font-medium mb-1">HCS-10 Compatible</p>
+          <p className="text-slate-300 mb-2">This chat uses the HCS-10 standard for message storage on Hedera.</p>
+          <p className="text-slate-300">Messages can be viewed in any HCS-10 compatible viewer like Moonscape.</p>
+          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-slate-800"></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// HCS-10 badge component for individual messages
+const MessageHCS10Badge = () => (
+  <div className="inline-flex items-center text-xs bg-indigo-800/40 px-2 py-0.5 rounded-md ml-2">
+    <span className="text-indigo-300 text-[10px] font-mono">HCS-10</span>
+  </div>
+);
 
 const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
   const { accountId, isConnected } = useWallet();
@@ -63,6 +111,10 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
   // State to track current usage quota
   const [currentUsageQuota, setCurrentUsageQuota] = useState<number>(0); // Start with zero, no messages allowed until we verify quota
   const [showQuotaAlert, setShowQuotaAlert] = useState<boolean>(false);
+  // Add a state to track if messages are in HCS-10 format
+  const [hasHcs10Messages, setHasHcs10Messages] = useState(false);
+  // Track which messages are using HCS-10 format
+  const [hcs10MessageIds, setHcs10MessageIds] = useState<Set<string>>(new Set());
 
   // Fetch operator ID when component mounts
   useEffect(() => {
@@ -172,13 +224,23 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
       if (data.success && data.messages && Array.isArray(data.messages)) {
         // Convert topic messages to chat messages format
         const chatMessages: Message[] = [];
+        const hcs10Ids = new Set<string>();
         
         // Sort messages by timestamp (oldest first)
-        const sortedMessages = [...data.messages].sort((a: TopicMessage, b: TopicMessage) => 
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
+        const sortedMessages = [...data.messages].sort((a: TopicMessage, b: TopicMessage) => {
+          const timestampA = a.timestamp || a.metadata?.timestamp || '';
+          const timestampB = b.timestamp || b.metadata?.timestamp || '';
+          return new Date(timestampA).getTime() - new Date(timestampB).getTime();
+        });
 
         console.log("🔍 Sorted messages:", sortedMessages);
+        
+        // Check if any messages use HCS-10 format
+        const hcs10MessageExists = sortedMessages.some(msg => 
+          msg.type === 'openconvai.message' && msg.input && msg.output
+        );
+        setHasHcs10Messages(hcs10MessageExists);
+        console.log("🔍 Found HCS-10 formatted messages:", hcs10MessageExists);
         
         // Get the most recent quota from any message type
         let foundQuota = false;
@@ -187,11 +249,12 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
         // First scan for quota updates in reverse order (newest first)
         for (let i = sortedMessages.length - 1; i >= 0 && !foundQuota; i--) {
           const msg = sortedMessages[i];
-          console.log(`🔍 Checking message ${i} for quota:`, msg.id, msg.usageQuota);
+          const quota = msg.usageQuota !== undefined ? msg.usageQuota : msg.metadata?.usageQuota;
+          console.log(`🔍 Checking message ${i} for quota:`, msg.id, quota);
           
-          if (msg.usageQuota !== undefined && msg.usageQuota !== null) {
-            console.log(`🔍 Found quota in message ${msg.id}: ${msg.usageQuota}`);
-            mostRecentQuota = msg.usageQuota;
+          if (quota !== undefined && quota !== null) {
+            console.log(`🔍 Found quota in message ${msg.id}: ${quota}`);
+            mostRecentQuota = quota;
             foundQuota = true;
           }
         }
@@ -214,25 +277,39 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
         
         // Convert each topic message to two chat messages (user and assistant)
         displayMessages.forEach((msg: TopicMessage, index: number) => {
+          // Check if it's HCS-10 format or legacy format
+          const isHcs10Format = msg.type === 'openconvai.message' && msg.input && msg.output;
+          
+          // Create unique IDs for the message pairs
+          const userMsgId = `user-${msg.id}-${index}`;
+          const assistantMsgId = `assistant-${msg.id}-${index}`;
+          
+          // If HCS-10 format, add both IDs to the set
+          if (isHcs10Format) {
+            hcs10Ids.add(userMsgId);
+            hcs10Ids.add(assistantMsgId);
+          }
+          
           // Add user message with unique index to prevent duplicate keys
           chatMessages.push({
-            id: `user-${msg.id}-${index}`,
+            id: userMsgId,
             role: 'user',
-            content: msg.question,
-            timestamp: new Date(msg.timestamp)
+            content: isHcs10Format ? msg.input?.message || '' : (msg.question || ''),
+            timestamp: new Date(isHcs10Format ? (msg.metadata?.timestamp || msg.timestamp) : msg.timestamp)
           });
           
           // Add assistant message with unique index to prevent duplicate keys
           chatMessages.push({
-            id: `assistant-${msg.id}-${index}`,
+            id: assistantMsgId,
             role: 'assistant',
-            content: msg.answer,
-            timestamp: new Date(msg.timestamp)
+            content: isHcs10Format ? msg.output?.message || '' : (msg.answer || ''),
+            timestamp: new Date(isHcs10Format ? (msg.metadata?.timestamp || msg.timestamp) : msg.timestamp)
           });
         });
         
-        // Update state with loaded messages
+        // Update state with loaded messages and HCS-10 IDs
         setMessages(chatMessages);
+        setHcs10MessageIds(hcs10Ids);
         
         console.log(`Loaded ${chatMessages.length} messages from topic ${topicId}`);
       } else {
@@ -265,11 +342,9 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
   const saveMessageToTopic = async (message: Message, usageQuota?: number) => {
     if (!topicId) return;
 
-    console.log('DEBUG CHAT: saveMessageToTopic called', message, usageQuota);
     
     try {
       // Send message to backend with current usage quota
-      console.log('DEBUG CHAT: Making API call to /api/chat with', { message: message.content, topicId, usageQuota });
       const response = await fetch(`/api/chat`, {
         method: 'POST',
         headers: {
@@ -283,23 +358,19 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
       });
 
       if (!response.ok) {
-        console.log('DEBUG CHAT: API call failed with status', response.status);
         const errorData = await response.json();
-        console.log('DEBUG CHAT: Error details', errorData);
         throw new Error(errorData.error || 'Failed to save message');
       }
 
       const data = await response.json();
-      console.log('DEBUG CHAT: API response received', data);
 
-      if (data.usageQuota !== undefined) {
-        console.log('DEBUG CHAT: Updating usage quota from', currentUsageQuota, 'to', data.usageQuota);
-        setCurrentUsageQuota(data.usageQuota);
+      // Update quota from response
+      if (data.remainingQuota !== undefined) {
+        setCurrentUsageQuota(data.remainingQuota);
       }
 
       return data.response;
     } catch (error) {
-      console.error('DEBUG CHAT: Error in saveMessageToTopic:', error);
       console.error('Error saving message:', error);
       throw error; // Re-throw the error to be handled by the caller
     }
@@ -307,9 +378,6 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
 
   // Function to extract useful content from a message (doesn't save to localStorage)
   const extractUsefulContent = (content: string): PinnedItem[] => {
-    console.log("🔍 Extracting useful content");
-    console.log("🔍 Content type:", typeof content);
-    console.log("🔍 Content length:", content?.length);
     
     // Safety check for content
     if (!content || typeof content !== 'string' || content.length === 0) {
@@ -469,18 +537,15 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
   const handleSendMessage = async () => {
     if (input.trim() === '') return;
     
-    console.log('DEBUG CHAT: handleSendMessage called with input:', input);
     
     // Check subscription status first
     if (!hasActiveSubscription) {
-      console.log('DEBUG CHAT: No active subscription, showing payment modal');
       setShowPaymentModal(true);
       return;
     }
     
     // Check for remaining quota
     if (currentUsageQuota <= 0) {
-      console.log('DEBUG CHAT: No quota available, showing notification');
       setMessages(prevMessages => [
         ...prevMessages,
         {
@@ -501,17 +566,13 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
       timestamp: new Date()
     };
     
-    console.log("DEBUG CHAT: Created user message:", userMessage);
     setMessages(prevMessages => [...prevMessages, userMessage]);
     setInput('');
     setIsLoading(true);
     
     try {
-      console.log("DEBUG CHAT: Calling saveMessageToTopic with quota:", currentUsageQuota);
-      // Save user message with current quota
       const response = await saveMessageToTopic(userMessage, currentUsageQuota);
       
-      console.log("DEBUG CHAT: Received response from saveMessageToTopic:", response);
 
       // Check if we got a valid response
       if (!response) {
@@ -525,7 +586,6 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
         timestamp: new Date()
       };
       
-      console.log("DEBUG CHAT: Created assistant message:", assistantMessage.id);
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
       
       // Save assistant message with decremented quota
@@ -534,14 +594,11 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
       
       // Update local quota
       setCurrentUsageQuota(newQuota);
-      console.log("DEBUG CHAT: Updated local quota to:", newQuota);
       
       // Process new message for useful content
       processNewMessage(response);
       
     } catch (error) {
-      console.error('DEBUG CHAT: Error in handleSendMessage:', error);
-      console.error('🔴 Error getting response:', error);
       
       // Add error message
       setMessages(prevMessages => [
@@ -667,6 +724,17 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
 
   return (
     <div className="flex flex-col h-full">
+      {/* HCS-10 info bar */}
+      {hasHcs10Messages && (
+        <div className="flex items-center justify-center space-x-1 py-1 px-4 bg-indigo-900/20 border-b border-indigo-500/20 text-xs text-indigo-300">
+          <div className="flex items-center">
+            <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 mr-1.5 animate-pulse"></span>
+            <span>HCS-10 Compatible Messages</span>
+          </div>
+          <HCS10InfoTooltip />
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto px-4 py-2 scrollbar-custom">
         {isLoadingHistory ? (
           <div className="flex flex-col items-center justify-center h-full text-white/60">
@@ -711,13 +779,18 @@ const Chat: React.FC<ChatProps> = ({ generatedStructure, setPinnedItems }) => {
                       {message.content}
                     </div>
                   )}
-                  <div className={`text-xs mt-1 ${
+                  <div className={`text-xs mt-1 flex items-center ${
                     message.role === 'user' ? 'text-indigo-200/70' : 'text-gray-400'
                   }`}>
                     {message.timestamp.toLocaleTimeString(undefined, {
                       hour: '2-digit',
                       minute: '2-digit'
                     })}
+                    
+                    {/* Show HCS-10 badge for compatible messages */}
+                    {hcs10MessageIds.has(message.id) && (
+                      <MessageHCS10Badge />
+                    )}
                   </div>
                 </div>
               </div>

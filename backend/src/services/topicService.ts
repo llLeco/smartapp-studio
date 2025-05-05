@@ -1,6 +1,6 @@
 import { PrivateKey, TopicCreateTransaction } from "@hashgraph/sdk";
-import { getMirrorNodeUrl, getClient } from "./hederaService";
-import { NftMetadata } from "./licenseService";
+import { getMirrorNodeUrl, getClient } from "./hederaService.js";
+import { NftMetadata } from "./licenseService.js";
 
 export interface Message {
     consensusTimestamp: string;

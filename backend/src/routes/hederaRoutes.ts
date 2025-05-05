@@ -8,7 +8,7 @@ import {
   getLicenseCollectionId, 
   getMirrorNodeUrl, 
   getHsuiteTokenId,
-} from '../services/hederaService';
+} from '../services/hederaService.js';
 
 const router = express.Router();
 

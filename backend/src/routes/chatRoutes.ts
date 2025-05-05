@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { askAssistant, getChatMessages, updateUsageQuota } from '../services/chatService';
+import { askAssistant, getChatMessages, updateUsageQuota } from '../services/chatService.js';
 
 const router = express.Router();
 
@@ -22,12 +22,21 @@ router.post('/message', async (req: Request, res: Response) => {
       });
     }
     
-    // Use the AI assistant to generate a response, passing the topicId
+    // Validate usageQuota
+    if (usageQuota === undefined || usageQuota === null) {
+      return res.status(400).json({
+        success: false,
+        error: 'Usage quota is required'
+      });
+    }
+    
+    // Use the AI assistant to generate a response, passing the topicId and usageQuota
     const response = await askAssistant(message, topicId, usageQuota);
     
     return res.status(200).json({ 
       success: true, 
-      response 
+      response,
+      remainingQuota: usageQuota > 0 ? usageQuota - 1 : 0
     });
   } catch (error: any) {
     console.error('Error processing chat message:', error);

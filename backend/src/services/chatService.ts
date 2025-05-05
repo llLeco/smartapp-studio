@@ -2,9 +2,9 @@ import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { TopicId, TopicMessageSubmitTransaction, PrivateKey } from "@hashgraph/sdk";
 import { Client } from "@hashgraph/sdk";
-import { getTopicMessages } from "./topicService";
-import { getMirrorNodeUrl } from './hederaService';
-import { KnowledgeBaseService } from './knowledgeBaseService';
+import { getMirrorNodeUrl } from './hederaService.js';
+import { KnowledgeBaseService } from './knowledgeBaseService.js';
+import { HCS10Client } from '@hashgraphonline/standards-sdk';
 
 dotenv.config();
 
@@ -35,13 +35,15 @@ export interface SubscriptionDetails {
 
 /**
  * Asks the OpenAI assistant to generate SmartApp structure based on the prompt
- * and records both question and answer to a Hedera topic
+ * and records both question and answer to a Hedera topic using HCS-10 standard
  * @param prompt User's input describing the SmartApp
  * @param topicId Hedera topic ID to record the conversation
+ * @param usageQuota Current usage quota for the user
  * @returns Generated response from the assistant
  */
 export async function askAssistant(prompt: string, topicId: string, usageQuota: number): Promise<any> {
   try {
+    
     // Validate inputs
     if (!prompt || typeof prompt !== 'string') {
       throw new Error('Invalid prompt provided');
@@ -119,22 +121,64 @@ export async function askAssistant(prompt: string, topicId: string, usageQuota: 
     }
 
     if (!responseContent) {
-      console.warn('DEBUG CHAT: chatService.ts - Empty response from OpenAI');
       return getFallbackResponse(prompt, topicId);
     }
 
     if (topicId) {
       try {
-        await recordConversationToTopic(topicId, prompt, responseContent, usageQuota);
+        // Create HCS-10 OpenConvai message
+        const timestamp = new Date().toISOString();
+        
+        // Build the message in openconvai.message format
+        const openConvaiMessage = {
+          type: "openconvai.message",
+          input: {
+            message: prompt
+          },
+          output: {
+            message: responseContent
+          },
+          metadata: {
+            timestamp,
+            project: "SmartApp Studio",
+            usageQuota: usageQuota - 1
+          }
+        };
+        
+        // Get configuration from environment
+        const network = process.env.HEDERA_NETWORK || 'testnet';
+        const operatorId = process.env.HEDERA_OPERATOR_ID;
+        const operatorKey = process.env.HEDERA_OPERATOR_KEY;
+
+        if (!operatorId || !operatorKey) {
+          throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
+        }
+
+        // Create HCS-10 client
+        const hcs10Client = new HCS10Client({
+          network: network as 'mainnet' | 'testnet',
+          operatorId: operatorId,
+          operatorPrivateKey: operatorKey,
+          logLevel: 'info'
+        });
+        
+        try {
+          // Submit the message to the topic using HCS-10 standard
+          await hcs10Client.submitPayload(topicId, openConvaiMessage);
+          console.log(`Submitted HCS-10 message to topic ${topicId}`);
+        } catch (hcs10Error) {
+          console.error('Error submitting HCS-10 message:', hcs10Error);
+          
+          // If HCS-10 submission fails, fall back to legacy method
+          await recordConversationToTopic(topicId, prompt, responseContent, usageQuota);
+        }
       } catch (recordError) {
-        console.error('DEBUG CHAT: chatService.ts - Error recording to topic:', recordError);
-        // We'll still return the OpenAI response even if recording fails
+        console.error('Error recording to topic:', recordError);
       }
     }
 
     return responseContent;
   } catch (error: any) {
-    console.error('DEBUG CHAT: chatService.ts - Error in askAssistant:', error);
     return getFallbackResponse(prompt, topicId);
   }
 }
@@ -169,10 +213,8 @@ function getFallbackResponse(prompt: string, topicId: string): string {
   // Try to record the conversation with the fallback response
   try {
     recordConversationToTopic(topicId, prompt, fallbackResponse, 0).catch(err => {
-      console.error('DEBUG CHAT: chatService.ts - Failed to record fallback response:', err);
     });
   } catch (error) {
-    console.error('DEBUG CHAT: chatService.ts - Error recording fallback response:', error);
   }
 
   return fallbackResponse;

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { createEmbedding } from './utils/embedding.util';
-import { splitTextIntoChunks } from './utils/split-text.util';
+import { createEmbedding } from './utils/embedding.util.js';
+import { splitTextIntoChunks } from './utils/split-text.util.js';
 
 async function readFiles(dir: string) {
   let files = fs.readdirSync(dir);

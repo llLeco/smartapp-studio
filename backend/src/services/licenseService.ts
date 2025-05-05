@@ -1,6 +1,6 @@
 import { AccountId, PrivateKey, TokenId, TokenMintTransaction, TopicId, TopicMessageSubmitTransaction, TransferTransaction } from "@hashgraph/sdk";
-import { getClient, getMirrorNodeUrl, getOperatorId } from "./hederaService";
-import { getTopicMessages } from "./topicService";
+import { getClient, getMirrorNodeUrl, getOperatorId } from "./hederaService.js";
+import { getTopicMessages } from "./topicService.js";
 
 export interface LicenseInfo {
     tokenId: string;

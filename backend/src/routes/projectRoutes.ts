@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { createProjectTopic, recordProjectToLicense } from '../services/projectService';
+import { createProjectTopic, recordProjectToLicense } from '../services/projectService.js';
 
 const router = express.Router();
 

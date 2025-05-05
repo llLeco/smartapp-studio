@@ -1,4 +1,3 @@
-// backend/services/hederaService.ts
 import "dotenv/config";
 import { Client, Transaction } from "@hashgraph/sdk";
 

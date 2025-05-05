@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "description": "Backend for SmartApp Studio",
   "main": "dist/server.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts"
+    "dev": "node --loader ts-node/esm src/server.ts"
   },
   "dependencies": {
     "@hashgraph/hethers": "^1.2.6",
     "@hashgraph/sdk": "^2.63.0",
+    "@hashgraphonline/standards-sdk": "^0.0.95",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@prisma/client": "^6.6.0",

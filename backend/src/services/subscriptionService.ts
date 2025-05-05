@@ -1,6 +1,6 @@
 import { PrivateKey, TopicMessageSubmitTransaction, TopicId } from "@hashgraph/sdk";
 import { Client } from "@hashgraph/sdk";
-import { getTopicMessages } from "./topicService";
+import { getTopicMessages } from "./topicService.js";
 
 /**
  * Interface for subscription details

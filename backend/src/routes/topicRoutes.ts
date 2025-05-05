@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
-import { getTopicMessages, createTopic } from '../services/topicService';
-import { NftMetadata } from '../services/licenseService';
+import { getTopicMessages, createTopic } from '../services/topicService.js';
+import { NftMetadata } from '../services/licenseService.js';
 
 const router = express.Router();
 

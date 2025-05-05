@@ -1,5 +1,5 @@
 import { TopicCreateTransaction, TopicMessageSubmitTransaction } from "@hashgraph/sdk";
-import { getClient } from "./hederaService";
+import { getClient } from "./hederaService.js";
 
 /**
  * Creates a new topic for a project

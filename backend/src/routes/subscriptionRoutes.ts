@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { getSubscriptionDetails, recordSubscriptionToTopic, SubscriptionDetails } from '../services/subscriptionService';
+import { getSubscriptionDetails, recordSubscriptionToTopic, SubscriptionDetails } from '../services/subscriptionService.js';
 
 const router = express.Router();
 

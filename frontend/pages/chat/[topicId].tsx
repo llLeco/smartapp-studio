@@ -64,6 +64,13 @@ const OrbitingParticles = () => {
   return <div className="fixed inset-0 z-0 overflow-hidden">{particles}</div>;
 };
 
+const HCS10Badge = () => (
+  <div className="flex items-center bg-indigo-800/40 px-2 py-1 rounded-md text-xs font-mono">
+    <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 mr-1.5 animate-pulse"></span>
+    <span className="text-indigo-300">HCS-10</span>
+  </div>
+);
+
 interface PinnedItem {
   id: string;
   type: 'code' | 'link';
@@ -82,6 +89,7 @@ export default function ProjectChatPage() {
   const { isConnected, accountId } = useWallet();
   const [projectName, setProjectName] = useState("My Project");
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
+  const [isHcs10Compatible, setIsHcs10Compatible] = useState(true);
 
   // Effect to ensure the component is mounted only on the client
   useEffect(() => {
@@ -103,6 +111,7 @@ export default function ProjectChatPage() {
     try {
       console.log(`Loading project information with topicId: ${id}`);
       setProjectName(`Project #${id}`);
+      setIsHcs10Compatible(true);
     } catch (error) {
       console.error('Error loading project information:', error);
     }
@@ -147,9 +156,18 @@ export default function ProjectChatPage() {
                   </svg>
                 </button>
                 <span className="text-sm font-medium text-white">{projectName}</span>
+                
+                {/* HCS-10 compatibility badge */}
+                {isHcs10Compatible && (
+                  <div className="ml-3">
+                    <HCS10Badge />
+                  </div>
+                )}
               </div>
-              <div className="text-xs text-white/50 font-mono">
-                {topicId}
+              <div className="flex items-center">
+                <span className="text-xs text-white/50 font-mono">
+                  {topicId}
+                </span>
               </div>
             </div>
 

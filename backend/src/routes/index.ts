@@ -1,10 +1,10 @@
 import express from 'express';
-import hederaRoutes from './hederaRoutes';
-import topicRoutes from './topicRoutes';
-import licenseRoutes from './licenseRoutes';
-import subscriptionRoutes from './subscriptionRoutes';
-import projectRoutes from './projectRoutes';
-import chatRoutes from './chatRoutes';
+import hederaRoutes from './hederaRoutes.js';
+import topicRoutes from './topicRoutes.js';
+import licenseRoutes from './licenseRoutes.js';
+import subscriptionRoutes from './subscriptionRoutes.js';
+import projectRoutes from './projectRoutes.js';
+import chatRoutes from './chatRoutes.js';
 
 const router = express.Router();
 

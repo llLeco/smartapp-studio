@@ -11,6 +11,7 @@ import {
   mapSubscriptionToInfo, 
   SubscriptionInfo as SubInfo,
 } from '../../services/subscriptionService';
+import SubscriptionModal from '../../components/SubscriptionModal';
 // Interface for subscription details
 interface SubscriptionInfo {
   active: boolean;
@@ -377,7 +378,7 @@ const AppPage = () => {
                       )}
                       
                       {/* Create Project Button */}
-                      {subscription?.active && projects.length < 3 ? (
+                      {subscription?.active && projects.length < 5 ? (
                         <button 
                           onClick={() => setShowProjectCreateModal(true)}
                           disabled={projectLoading}
@@ -401,11 +402,11 @@ const AppPage = () => {
                           )}
                         </button>
                       ) : (
-                        (!subscription?.active || subscription?.expired || projects.length >= 3) && (
+                        (!subscription?.active || subscription?.expired || projects.length >= 5) && (
                           <div className="text-sm text-gray-400 italic">
                             {subscription?.expired 
                               ? 'Renew your subscription to create projects' 
-                              : projects.length >= 3
+                              : projects.length >= 5
                                 ? 'Maximum limit of 3 projects reached for this DEMO'
                                 : 'Subscribe to create projects'}
                           </div>
@@ -504,6 +505,14 @@ const AppPage = () => {
         onClose={() => setShowProjectCreateModal(false)}
         onConfirm={handleCreateProject}
         isProcessing={projectLoading}
+      />
+      
+      {/* Subscription Modal */}
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onConfirm={handleSubscriptionConfirm}
+        isRenewal={isRenewalMode}
       />
     </>
   );
