@@ -22,9 +22,34 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK' });
 });
 
+// Initialize services - safer dynamic import to avoid ESM issues
+let chatServiceInitialized = false;
+(async () => {
+  try {
+    // Use a more defensive import approach
+    const chatService = await import('./services/chatService.js').catch(error => {
+      console.error('❌ Failed to import chat service:', error);
+      return { initChatService: null };
+    });
+    
+    if (chatService && typeof chatService.initChatService === 'function') {
+      await chatService.initChatService();
+      chatServiceInitialized = true;
+      console.log('✅ Chat service initialized successfully');
+    } else {
+      console.warn('⚠️ Chat service initialization function not found');
+    }
+    
+    console.log('✅ Services initialization completed');
+  } catch (error) {
+    console.error('❌ Error initializing services:', error);
+  }
+})();
+
 // Start server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  console.log(`Chat service initialized: ${chatServiceInitialized ? 'Yes' : 'No'}`);
 });
 
 export default app; 

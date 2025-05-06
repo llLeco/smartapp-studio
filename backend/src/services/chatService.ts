@@ -1,48 +1,136 @@
-import OpenAI from 'openai';
+import { Client, PrivateKey, TopicId, TopicMessageSubmitTransaction } from '@hashgraph/sdk';
 import dotenv from 'dotenv';
-import { TopicId, TopicMessageSubmitTransaction, PrivateKey } from "@hashgraph/sdk";
-import { Client } from "@hashgraph/sdk";
+import axios from 'axios';
 import { getMirrorNodeUrl } from './hederaService.js';
 import * as SDK from '@hashgraphonline/standards-sdk';
 
+// Use a more robust approach for importing OpenAI
+let OpenAI: any = null;
+try {
+  OpenAI = (await import('openai')).default;
+} catch (e) {
+  console.warn('⚠️ OpenAI SDK import failed, AI features will be limited');
+}
+
+// Load environment variables
 dotenv.config();
 
-// Create a mock client for fallback
-const createMockClient = () => ({
-  handleConnectionRequest: async () => ({ connectionTopicId: 'mock-topic-id' }),
-  getMessageStream: async () => ({ messages: [] }),
-  sendMessage: async () => console.log('Mock client: message sent'),
-  getMessageContent: async () => 'Mock content'
-});
+// For HCS-10 client - handle both with and without a real client
+let hcs10Client: any = null;
+let messageListeners: Map<string, any> = new Map();
+let isMonitoringMessages: boolean = false;
 
-// Initialize client with fallback
-let hcs10Client: any;
-try {
-  // Try to access the client from SDK - this may need to be adjusted based on the actual SDK structure
-  const SDKAny = SDK as any;
-  
-  if (SDKAny.HCS10Client) {
-    console.log('🔵 HCS10Client class found in SDK, attempting to initialize...');
+// Create a mock client for fallback
+const createMockClient = () => {
+  console.log('⚠️ Creating mock HCS-10 client');
+  return {
+    handleConnectionRequest: async () => ({ connectionTopicId: 'mock-topic-id' }),
+    getMessageStream: async () => {
+      const events = new (require('events').EventEmitter)();
+      return events;
+    },
+    sendMessage: async (topicId: string, message: string, memo?: string) => {
+      console.log(`🔵 [MOCK] Sending message to topic ${topicId}: ${message.substring(0, 100)}...`);
+      return { success: true, message: 'Mock message sent' };
+    },
+    getMessageContent: async () => 'Mock content'
+  };
+};
+
+// Initialize client with fallback - use a safer approach
+async function initializeStandardsClient() {
+  try {
+    console.log('🔵 Attempting to initialize HCS10Client');
     
+    // Check environment variables
     if (!process.env.AGENT_ACCOUNT_ID || !process.env.AGENT_PRIVATE_KEY) {
-      console.warn('⚠️ Missing AGENT_ACCOUNT_ID or HEDERA_PRIVATE_KEY in environment');
+      console.warn('⚠️ Missing AGENT_ACCOUNT_ID or AGENT_PRIVATE_KEY in environment');
+      return createMockClient();
     }
     
-    hcs10Client = new SDKAny.HCS10Client({
+    // Create configuration object
+    const clientConfig = {
       network: (process.env.HEDERA_NETWORK as 'testnet'|'mainnet') || 'testnet',
-      operatorId: process.env.AGENT_ACCOUNT_ID || '',
-      operatorPrivateKey: process.env.AGENT_PRIVATE_KEY || '',
+      operatorId: process.env.AGENT_ACCOUNT_ID,
+      operatorPrivateKey: process.env.AGENT_PRIVATE_KEY,
       logLevel: 'info'
+    };
+    
+    console.log('🔵 Client configuration:', {
+      network: clientConfig.network,
+      operatorId: clientConfig.operatorId ? 'Set' : 'Not set',
+      operatorPrivateKey: clientConfig.operatorPrivateKey ? 'Set (redacted)' : 'Not set'
     });
-    console.log('✅ HCS10Client initialized successfully');
-  } else {
-    console.warn('⚠️ HCS10Client not found in SDK, using mock client');
-    hcs10Client = createMockClient();
+    
+    try {
+      // Try to import from standards-sdk first
+      console.log('🔵 Trying to import from @hashgraphonline/standards-sdk');
+      const standardsSDKModule = await import('@hashgraphonline/standards-sdk').catch(() => null);
+      
+      if (standardsSDKModule) {
+        const sdkAny = standardsSDKModule as any;
+        
+        // Log available exports
+        console.log('🔵 standards-sdk exports:', Object.keys(sdkAny));
+        
+        if (sdkAny.HCS10Client) {
+          console.log('✅ HCS10Client found in standards-sdk');
+          hcs10Client = new sdkAny.HCS10Client(clientConfig);
+          return hcs10Client;
+        }
+      }
+      
+      // Try to import from standards-agent-kit
+      console.log('🔵 Trying to import from @hashgraphonline/standards-agent-kit');
+      const standardsKitModule = await import('@hashgraphonline/standards-agent-kit').catch(() => null);
+      
+      if (standardsKitModule) {
+        const kitAny = standardsKitModule as any;
+        
+        // Log available exports
+        console.log('🔵 standards-agent-kit exports:', Object.keys(kitAny));
+        
+        // Find HCS10Client in various possible locations
+        let ClientConstructor = null;
+        
+        if (typeof kitAny.HCS10Client === 'function') {
+          ClientConstructor = kitAny.HCS10Client;
+        } else if (kitAny.default && typeof kitAny.default.HCS10Client === 'function') {
+          ClientConstructor = kitAny.default.HCS10Client;
+        } else {
+          // Check nested exports
+          for (const key of Object.keys(kitAny)) {
+            const value = kitAny[key];
+            if (value && typeof value === 'object' && typeof value.HCS10Client === 'function') {
+              ClientConstructor = value.HCS10Client;
+              break;
+            }
+          }
+        }
+        
+        if (ClientConstructor) {
+          console.log('✅ HCS10Client constructor found in standards-agent-kit');
+          hcs10Client = new ClientConstructor(
+            clientConfig.operatorId,
+            clientConfig.operatorPrivateKey,
+            clientConfig.network
+          );
+          return hcs10Client;
+        }
+      }
+      
+      // If we get here, no client was found
+      console.warn('⚠️ Could not find HCS10Client in any module');
+      return createMockClient();
+      
+    } catch (importError) {
+      console.error('❌ Error importing client modules:', importError);
+      return createMockClient();
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize HCS10Client:', error);
+    return createMockClient();
   }
-} catch (error) {
-  console.error('❌ Failed to initialize HCS10Client:', error);
-  hcs10Client = createMockClient();
-  console.log('⚠️ Using mock client after initialization error');
 }
 
 // Agent configuration object
@@ -59,6 +147,13 @@ const userConnectionTopics = new Map<string, string>();
 
 // The agent executor instance
 let agentExecutor: any = null;
+
+// Add this type definition at the top of the file
+// Define a type for the HCS10Client
+interface HCS10Client {
+  sendMessage: (topicId: string, message: string, memo?: string) => Promise<any>;
+  getMessageStream: (topicId: string) => Promise<any>;
+}
 
 /**
  * Initializes the agent for responding to user queries
@@ -768,5 +863,289 @@ export async function updateUsageQuota(topicId: string, usageQuota: number): Pro
   } catch (error) {
     console.error('❌ Error updating usage quota:', error);
     throw error;
+  }
+}
+
+/**
+ * Start monitoring for messages on all active topics
+ */
+async function startMessageMonitoring() {
+  if (isMonitoringMessages) {
+    console.log('🔵 Message monitoring already active');
+    return;
+  }
+  
+  try {
+    console.log('🔵 Starting message monitoring');
+    isMonitoringMessages = true;
+    
+    if (!hcs10Client) {
+      console.warn('⚠️ No HCS10Client available, cannot monitor messages');
+      return;
+    }
+    
+    // Get known topic IDs - could be from a database or environment
+    const topicIds = [
+      process.env.AGENT_INBOUND_TOPIC_ID,
+      process.env.AGENT_OUTBOUND_TOPIC_ID,
+      process.env.AGENT_PROFILE_TOPIC_ID
+    ].filter(Boolean) as string[];
+    
+    if (topicIds.length === 0) {
+      console.warn('⚠️ No topic IDs available to monitor');
+      return;
+    }
+    
+    console.log(`🔵 Found ${topicIds.length} topics to monitor`);
+    
+    // Set up listeners for each topic
+    for (const topicId of topicIds) {
+      setupTopicListener(topicId);
+    }
+    
+    console.log('✅ Message monitoring started');
+  } catch (error) {
+    console.error('❌ Error starting message monitoring:', error);
+    isMonitoringMessages = false;
+  }
+}
+
+/**
+ * Set up a listener for messages on a specific topic
+ */
+async function setupTopicListener(topicId: string) {
+  try {
+    console.log(`🔵 Setting up listener for topic ${topicId}`);
+    
+    // Check if we already have a listener for this topic
+    if (messageListeners.has(topicId)) {
+      console.log(`🔵 Listener already exists for topic ${topicId}`);
+      return;
+    }
+    
+    if (!hcs10Client) {
+      console.warn('⚠️ No HCS10Client available, cannot setup topic listener');
+      return;
+    }
+    
+    // Set up message stream
+    const messageStream = await hcs10Client.getMessageStream(topicId);
+    console.log(`🔵 Message stream created for topic ${topicId}`);
+    console.log(`🔵 Message stream type: ${typeof messageStream}, properties:`, Object.keys(messageStream));
+    
+    // Store the stream for cleanup later
+    messageListeners.set(topicId, messageStream);
+    
+    // Handle different message stream formats
+    if (messageStream.on && typeof messageStream.on === 'function') {
+      // EventEmitter style API
+      console.log(`🔵 Using EventEmitter style API for topic ${topicId}`);
+      
+      messageStream.on('message', (message: any) => {
+        processIncomingMessage(topicId, message);
+      });
+      
+      messageStream.on('error', (error: any) => {
+        console.error(`❌ Error in message stream for topic ${topicId}:`, error);
+      });
+    } 
+    else if (messageStream.messages && Array.isArray(messageStream.messages)) {
+      // Array style API
+      console.log(`🔵 Using Array style API for topic ${topicId}`);
+      
+      // Process existing messages
+      for (const message of messageStream.messages) {
+        processIncomingMessage(topicId, message);
+      }
+      
+      // Set up polling for new messages
+      const pollInterval = setInterval(async () => {
+        try {
+          // Get latest messages and compare with what we've seen
+          const latestStream = await hcs10Client.getMessageStream(topicId);
+          if (latestStream && latestStream.messages) {
+            const newMessages = latestStream.messages.slice(messageStream.messages.length);
+            messageStream.messages = latestStream.messages; // Update our cache
+            
+            // Process new messages
+            for (const message of newMessages) {
+              processIncomingMessage(topicId, message);
+            }
+          }
+        } catch (pollError) {
+          console.error(`❌ Error polling for new messages on topic ${topicId}:`, pollError);
+        }
+      }, 5000); // Poll every 5 seconds
+      
+      // Store the interval for cleanup
+      messageListeners.set(`${topicId}-interval`, pollInterval);
+    }
+    else {
+      // Unknown format, try to extract useful information
+      console.log(`🔵 Unknown message stream format for topic ${topicId}, attempting to adapt`);
+      
+      if (messageStream && typeof messageStream === 'object') {
+        // Log what we received to help diagnose
+        console.log(`🔵 Message stream structure:`, JSON.stringify(messageStream).substring(0, 200) + '...');
+        
+        // Try to set up something reasonable based on what we have
+        // Start a polling mechanism to check for new messages
+        const pollInterval = setInterval(async () => {
+          try {
+            const newStream = await hcs10Client.getMessageStream(topicId);
+            console.log(`🔵 Polled for new messages on topic ${topicId}`);
+            
+            // Try to extract messages by examining the structure
+            if (newStream && typeof newStream === 'object') {
+              const possibleMessages = 
+                newStream.messages || 
+                newStream.data || 
+                (newStream.result && newStream.result.messages) ||
+                [];
+                
+              if (Array.isArray(possibleMessages)) {
+                console.log(`🔵 Found ${possibleMessages.length} possible messages in poll`);
+                
+                for (const message of possibleMessages) {
+                  processIncomingMessage(topicId, message);
+                }
+              }
+            }
+          } catch (pollError) {
+            console.error(`❌ Error in polling for topic ${topicId}:`, pollError);
+          }
+        }, 10000); // Poll every 10 seconds
+        
+        // Store the interval for cleanup
+        messageListeners.set(`${topicId}-interval`, pollInterval);
+      }
+    }
+    
+    console.log(`✅ Listener setup complete for topic ${topicId}`);
+  } catch (error) {
+    console.error(`❌ Error setting up listener for topic ${topicId}:`, error);
+  }
+}
+
+/**
+ * Process an incoming message from a topic
+ */
+async function processIncomingMessage(topicId: string, message: any) {
+  try {
+    console.log(`🔵 Received message on topic ${topicId}`);
+    
+    // Only process message operations
+    if (message.op !== 'message' || !message.data) {
+      console.log(`🔵 Ignoring non-message operation: ${message.op}`);
+      return;
+    }
+    
+    console.log(`🔵 Processing message: ${message.data.substring(0, 100)}...`);
+    
+    // Parse the message content
+    let content: any;
+    try {
+      content = JSON.parse(message.data);
+    } catch (parseError) {
+      console.warn('⚠️ Message is not valid JSON:', message.data.substring(0, 100));
+      return;
+    }
+    
+    // Handle different message types
+    if (content.type === 'openconvai.message') {
+      // Process OpenConvAI message
+      console.log(`🔵 Received OpenConvAI message: ${JSON.stringify(content).substring(0, 100)}...`);
+      
+      // Extract relevant information
+      const inputMessage = content.input?.message;
+      const outputMessage = content.output?.message;
+      const metadata = content.metadata || {};
+      
+      console.log(`🔵 Input: "${inputMessage?.substring(0, 50) || 'none'}..."`);
+      console.log(`🔵 Output: "${outputMessage?.substring(0, 50) || 'none'}..."`);
+      
+      // Here you would typically:
+      // 1. Store the message in your database
+      // 2. Notify any connected clients via WebSockets
+      // 3. Update any relevant state
+      
+      // For now, just log it
+      console.log(`✅ Processed OpenConvAI message from topic ${topicId}`);
+    } else if (content.type === 'query') {
+      // Process a query message
+      console.log(`🔵 Received query message: ${JSON.stringify(content).substring(0, 100)}...`);
+      
+      // Extract query information
+      const question = content.question;
+      const requestId = content.requestId;
+      const parameters = content.parameters || {};
+      
+      console.log(`🔵 Question: "${question}"`);
+      console.log(`🔵 RequestId: ${requestId}`);
+      
+      // Process the query with our agent
+      if (question && typeof processInputWithAgent === 'function') {
+        const response = await processInputWithAgent(question);
+        
+        // Send the response back to the topic
+        const responseContent = {
+          type: 'query_response',
+          requestId: requestId,
+          answer: response,
+          timestamp: new Date().toISOString()
+        };
+        
+        await hcs10Client.sendMessage(
+          topicId,
+          JSON.stringify(responseContent),
+          `Response to query ${requestId}`
+        );
+        
+        console.log(`✅ Sent response to query ${requestId}`);
+      }
+    } else {
+      console.log(`🔵 Unknown message type: ${content.type}`);
+    }
+  } catch (error) {
+    console.error(`❌ Error processing message from topic ${topicId}:`, error);
+  }
+}
+
+/**
+ * Initializes the chat service and all required components
+ */
+export async function initChatService() {
+  try {
+    console.log('🔵 Initializing Chat Service...');
+    
+    // Initialize HCS10Client first - with proper error handling
+    hcs10Client = await initializeStandardsClient();
+    
+    if (!hcs10Client) {
+      console.warn('⚠️ Failed to initialize HCS10Client, using mock client');
+      hcs10Client = createMockClient();
+    }
+    
+    // Then initialize the agent
+    const agentInitialized = await initializeAgent();
+    
+    if (!agentInitialized) {
+      console.warn('⚠️ Agent initialization failed');
+    }
+    
+    // Start monitoring topics if we have a real client
+    if (hcs10Client && typeof hcs10Client.getMessageStream === 'function') {
+      try {
+        await startMessageMonitoring();
+      } catch (monitorError) {
+        console.error('❌ Error starting message monitoring:', monitorError);
+      }
+    }
+    
+    console.log('✅ Chat Service initialization completed');
+    return true;
+  } catch (error) {
+    console.error('❌ Error initializing Chat Service:', error);
+    return false;
   }
 }
