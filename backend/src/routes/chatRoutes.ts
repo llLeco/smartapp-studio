@@ -1,5 +1,7 @@
-import express, { Request, Response } from 'express';
-import { askAssistant, getChatMessages, updateUsageQuota } from '../services/chatService.js';
+// Fix express import using dynamic import with CommonJS compatibility
+const express = await import('express').then(m => m.default || m);
+import { Request, Response } from 'express';
+import { askAssistant, getChatMessages, updateUsageQuota, connectWithUser, sendMessageToUser, sendStructuredMessageToUser } from '../services/chatService.js';
 
 const router = express.Router();
 
@@ -7,6 +9,8 @@ const router = express.Router();
 router.post('/message', async (req: Request, res: Response) => {
   try {
     const { message, topicId, usageQuota } = req.body;
+    
+    console.log(`🔵 Received chat message request:`, { message, topicId, usageQuota });
     
     if (!message) {
       return res.status(400).json({ 
@@ -30,8 +34,12 @@ router.post('/message', async (req: Request, res: Response) => {
       });
     }
     
-    // Use the AI assistant to generate a response, passing the topicId and usageQuota
+    console.log(`🔵 Calling askAssistant with message: "${message}", topicId: ${topicId}, usageQuota: ${usageQuota}`);
+    
+    // Always use all three parameters - message, topicId, and usageQuota
     const response = await askAssistant(message, topicId, usageQuota);
+    
+    console.log(`✅ Generated response: "${response}"`);
     
     return res.status(200).json({ 
       success: true, 
@@ -39,7 +47,7 @@ router.post('/message', async (req: Request, res: Response) => {
       remainingQuota: usageQuota > 0 ? usageQuota - 1 : 0
     });
   } catch (error: any) {
-    console.error('Error processing chat message:', error);
+    console.error('❌ Error processing chat message:', error);
     return res.status(500).json({ 
       success: false, 
       error: error.message || 'Failed to process chat message' 
@@ -139,6 +147,90 @@ router.patch('/quota', async (req: Request, res: Response) => {
     return res.status(500).json({ 
       success: false, 
       error: error.message || 'Failed to update quota' 
+    });
+  }
+});
+
+// Route to establish connection with a user via HCS-10
+router.post('/connect', async (req: Request, res: Response) => {
+  try {
+    const { userId, userAccountId, connectionRequestId } = req.body;
+    
+    if (!userId || !userAccountId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID and Hedera account ID are required' 
+      });
+    }
+    
+    // Establish connection with the user
+    const connectionTopicId = await connectWithUser(userId, userAccountId, connectionRequestId);
+    
+    return res.status(200).json({ 
+      success: true, 
+      connectionTopicId
+    });
+  } catch (error: any) {
+    console.error('Error connecting with user:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to connect with user' 
+    });
+  }
+});
+
+// Route to send a message to a connected user
+router.post('/send', async (req: Request, res: Response) => {
+  try {
+    const { userId, message } = req.body;
+    
+    if (!userId || !message) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID and message are required' 
+      });
+    }
+    
+    // Send message to the user
+    await sendMessageToUser(userId, message);
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Message sent successfully'
+    });
+  } catch (error: any) {
+    console.error('Error sending message to user:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to send message to user' 
+    });
+  }
+});
+
+// Route to send structured data to a connected user
+router.post('/send-structured', async (req: Request, res: Response) => {
+  try {
+    const { userId, data } = req.body;
+    
+    if (!userId || !data) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID and data are required' 
+      });
+    }
+    
+    // Send structured data to the user
+    await sendStructuredMessageToUser(userId, data);
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Structured data sent successfully'
+    });
+  } catch (error: any) {
+    console.error('Error sending structured data to user:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to send structured data to user' 
     });
   }
 });

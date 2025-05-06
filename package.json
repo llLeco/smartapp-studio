@@ -1,0 +1,20 @@
+{
+  "name": "smartapp-studio",
+  "version": "1.0.0",
+  "description": "SmartApp Studio application",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "register-agent": "NODE_OPTIONS=\"--loader ts-node/esm\" node register-agent.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@hashgraphonline/standards-sdk": "^0.0.95",
+    "dotenv": "^16.3.1"
+  }
+}

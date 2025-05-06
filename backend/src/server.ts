@@ -1,5 +1,6 @@
-import express from 'express';
-import cors from 'cors';
+// Fix imports using dynamic import with CommonJS compatibility
+const express = await import('express').then(m => m.default || m);
+const cors = await import('cors').then(m => m.default || m);
 import dotenv from 'dotenv';
 import routes from './routes/index.js';
 
