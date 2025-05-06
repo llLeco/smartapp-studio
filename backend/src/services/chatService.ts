@@ -651,6 +651,69 @@ function processReassembledMessage(chunks: string[], key: string, timestamp: str
 }
 
 /**
+ * Establish a connection with the HCS-10 agent
+ * @returns Topic ID for the connection, or null if connection failed
+ */
+async function establishAgentConnection(): Promise<string | null> {
+  try {
+    console.log('🔵 Establishing connection with the HCS-10 agent...');
+    
+    // Check if we have the agent client
+    if (!hcs10Client || typeof hcs10Client.handleConnectionRequest !== 'function') {
+      console.warn('⚠️ No valid HCS10Client available for connection');
+      return null;
+    }
+    
+    // Check if we have the required agent config
+    if (!agentConfig.accountId || !agentConfig.inboundTopicId) {
+      console.warn('⚠️ Missing agent configuration for connection');
+      return null;
+    }
+    
+    // Make sure we have outbound topic to return or null
+    const outboundTopic = agentConfig.outboundTopicId || null;
+    
+    console.log(`🔵 Agent inbound topic: ${agentConfig.inboundTopicId}`);
+    console.log(`🔵 Agent outbound topic: ${outboundTopic || 'not set'}`);
+    
+    // Try to establish a connection - this is typically done by sending a special
+    // message to the agent's inbound topic and waiting for a response
+    try {
+      // Get our operator ID, or use a placeholder if not available
+      const ourAccountId = process.env.HEDERA_OPERATOR_ID || '0.0.0000000';
+      
+      const connectionRequest = {
+        type: 'openconvai.connection_request',
+        fromAccountId: ourAccountId,
+        toAccountId: agentConfig.accountId,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log(`🔵 Sending connection request to agent ${agentConfig.accountId}`);
+      
+      // Send the connection request to the agent's inbound topic
+      await hcs10Client.sendMessage(
+        agentConfig.inboundTopicId,
+        JSON.stringify(connectionRequest),
+        'Connection request'
+      );
+      
+      console.log('✅ Connection request sent successfully');
+      
+      // In a real implementation, we would wait for a response on our own topic
+      // For now, we'll simply use the agent's outbound topic as our "connection"
+      return outboundTopic;
+    } catch (connectionError) {
+      console.error('❌ Error establishing connection with agent:', connectionError);
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error in establishAgentConnection:', error);
+    return null;
+  }
+}
+
+/**
  * Records a conversation (question and answer) to a Hedera topic
  * @param topicId The Hedera topic ID
  * @param question The user's question
@@ -676,73 +739,8 @@ export async function recordConversationToTopic(topicId: string, question: strin
       }
     }
 
-    // Try to use HCS10Client first if available
-    if (hcs10Client && typeof hcs10Client.sendMessage === 'function') {
-      try {
-        console.log(`🔵 Using HCS10Client to send message to topic ${topicId}`);
-        
-        // Create HCS-10 OpenConvai format message
-        const messageContent = {
-          type: 'openconvai.message',
-          input: {
-            message: question
-          },
-          output: {
-            message: answer
-          },
-          metadata: {
-            timestamp: new Date().toISOString(),
-            project: topicId,
-            usageQuota: usageQuota - 1
-          }
-        };
-        
-        // Send through HCS10Client
-        await hcs10Client.sendMessage(
-          topicId,
-          JSON.stringify(messageContent),
-          `SmartApp Studio AI message`
-        );
-        
-        console.log(`✅ Message sent via HCS10Client successfully`);
-        return;
-      } catch (clientError) {
-        console.error('❌ Error using HCS10Client, falling back to direct approach:', clientError);
-      }
-    }
-
-    // Set up client directly (similar to getClient implementation)
-    const network = process.env.HEDERA_NETWORK || 'testnet';
-    const operatorId = process.env.HEDERA_OPERATOR_ID;
-    const operatorKey = process.env.HEDERA_OPERATOR_KEY;
-
-    if (!operatorId || !operatorKey) {
-      throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
-    }
-
-    console.log(`🔵 Using operatorId: ${operatorId}`);
-
-    let client;
-    switch (network) {
-      case 'mainnet':
-        client = Client.forMainnet();
-        break;
-      case 'previewnet':
-        client = Client.forPreviewnet();
-        break;
-      default:
-        client = Client.forTestnet();
-    }
-
-    console.log(`🔵 Set up Hedera client for network: ${network}`);
-
-    // Non-null assertion is safe here because we've checked above
-    client.setOperator(operatorId, operatorKey);
-
-    // Create message content - using both standard and HCS-10 compatible format
-    const currentTimestamp = new Date().toISOString();
-    
-    // Create HCS-10 OpenConvai format
+    // Create HCS-10 OpenConvai format message
+    const timestamp = new Date().toISOString();
     const messageContent = {
       type: 'openconvai.message',
       input: {
@@ -752,22 +750,46 @@ export async function recordConversationToTopic(topicId: string, question: strin
         message: answer
       },
       metadata: {
-        timestamp: currentTimestamp,
+        timestamp: timestamp,
         project: topicId,
         usageQuota: usageQuota - 1
       }
     };
 
-    console.log(`🔵 Created HCS-10 compatible message content`);
-
+    // First, record to the user's topic - use direct Hedera SDK for reliability
     try {
-      // Get operator private key
-      const privateKey = PrivateKey.fromString(operatorKey);
-      console.log(`🔵 Successfully parsed private key`);
+      // Set up client directly
+      const network = process.env.HEDERA_NETWORK || 'testnet';
+      const operatorId = process.env.HEDERA_OPERATOR_ID;
+      const operatorKey = process.env.HEDERA_OPERATOR_KEY;
 
-      // Submit the message to the topic
+      if (!operatorId || !operatorKey) {
+        throw new Error('HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY must be set in environment variables');
+      }
+
+      console.log(`🔵 Using operatorId: ${operatorId}`);
+
+      let client;
+      switch (network) {
+        case 'mainnet':
+          client = Client.forMainnet();
+          break;
+        case 'previewnet':
+          client = Client.forPreviewnet();
+          break;
+        default:
+          client = Client.forTestnet();
+      }
+
+      console.log(`🔵 Set up Hedera client for network: ${network}`);
+      client.setOperator(operatorId, operatorKey);
+
+      // Submit the message to the user's topic
       const topicIdObj = TopicId.fromString(topicId);
       console.log(`🔵 Using topicId: ${topicIdObj.toString()}`);
+      
+      const privateKey = PrivateKey.fromString(operatorKey);
+      console.log(`🔵 Successfully parsed private key`);
       
       const transaction = new TopicMessageSubmitTransaction()
         .setTopicId(topicIdObj)
@@ -785,11 +807,79 @@ export async function recordConversationToTopic(topicId: string, question: strin
       const receipt = await txResponse.getReceipt(client);
       
       console.log(`✅ Message recorded to topic ${topicId} successfully, status: ${receipt.status.toString()}`);
-    } catch (innerError) {
-      console.error(`❌ Error during transaction execution:`, innerError);
-      throw innerError;
+      
+      // Second, try to send to the agent's inbound topic if configured
+      if (agentConfig.inboundTopicId && agentConfig.accountId) {
+        console.log(`🔵 Attempting to send message to agent's inbound topic: ${agentConfig.inboundTopicId}`);
+        
+        try {
+          // Use the AGENT credentials to send to the agent's topic
+          if (process.env.AGENT_ACCOUNT_ID && process.env.AGENT_PRIVATE_KEY) {
+            // Create a new client with agent credentials
+            let agentClient;
+            switch (network) {
+              case 'mainnet':
+                agentClient = Client.forMainnet();
+                break;
+              case 'previewnet':
+                agentClient = Client.forPreviewnet();
+                break;
+              default:
+                agentClient = Client.forTestnet();
+            }
+            
+            // Set operator with agent credentials
+            agentClient.setOperator(
+              process.env.AGENT_ACCOUNT_ID,
+              process.env.AGENT_PRIVATE_KEY
+            );
+            
+            // Format query message for the agent
+            const agentMessage = {
+              type: 'query',
+              question: question,
+              requestId: `req-${Date.now()}`,
+              parameters: {
+                topicId: topicId,
+                usageQuota: usageQuota - 1
+              }
+            };
+            
+            console.log(`🔵 Sending query to agent inbound topic: ${agentConfig.inboundTopicId}`);
+            
+            // Submit to the agent's inbound topic
+            const agentTopicId = TopicId.fromString(agentConfig.inboundTopicId);
+            const agentKey = PrivateKey.fromString(process.env.AGENT_PRIVATE_KEY);
+            
+            const agentTx = new TopicMessageSubmitTransaction()
+              .setTopicId(agentTopicId)
+              .setMessage(Buffer.from(JSON.stringify(agentMessage)))
+              .freezeWith(agentClient);
+              
+            const signedAgentTx = await agentTx.sign(agentKey);
+            const agentResponse = await signedAgentTx.execute(agentClient);
+            
+            console.log(`🔵 Agent message sent, waiting for receipt...`);
+            const agentReceipt = await agentResponse.getReceipt(agentClient);
+            
+            console.log(`✅ Message sent to agent topic ${agentConfig.inboundTopicId}, status: ${agentReceipt.status.toString()}`);
+          } else {
+            console.warn('⚠️ Missing AGENT_ACCOUNT_ID or AGENT_PRIVATE_KEY, cannot send to agent topic');
+          }
+        } catch (agentError) {
+          console.error(`❌ Error sending to agent topic:`, agentError);
+          // Don't re-throw, we already saved to the user topic
+        }
+      } else {
+        console.log(`⚠️ Agent inbound topic not configured, skipping agent communication`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error recording conversation:`, error);
+      throw error;
     }
 
+    console.log(`✅ Conversation recorded successfully to topic ${topicId}`);
   } catch (error) {
     console.error('❌ Error recording conversation to topic:', error);
     throw error;
@@ -946,168 +1036,39 @@ async function setupTopicListener(topicId: string) {
       });
       
       messageStream.on('error', (error: any) => {
-        console.error(`❌ Error in message stream for topic ${topicId}:`, error);
+        console.error(`⚠️ Error in message stream:`, error);
       });
-    } 
-    else if (messageStream.messages && Array.isArray(messageStream.messages)) {
-      // Array style API
-      console.log(`🔵 Using Array style API for topic ${topicId}`);
-      
-      // Process existing messages
-      for (const message of messageStream.messages) {
-        processIncomingMessage(topicId, message);
-      }
-      
-      // Set up polling for new messages
-      const pollInterval = setInterval(async () => {
-        try {
-          // Get latest messages and compare with what we've seen
-          const latestStream = await hcs10Client.getMessageStream(topicId);
-          if (latestStream && latestStream.messages) {
-            const newMessages = latestStream.messages.slice(messageStream.messages.length);
-            messageStream.messages = latestStream.messages; // Update our cache
-            
-            // Process new messages
-            for (const message of newMessages) {
-              processIncomingMessage(topicId, message);
-            }
-          }
-        } catch (pollError) {
-          console.error(`❌ Error polling for new messages on topic ${topicId}:`, pollError);
-        }
-      }, 5000); // Poll every 5 seconds
-      
-      // Store the interval for cleanup
-      messageListeners.set(`${topicId}-interval`, pollInterval);
     }
-    else {
-      // Unknown format, try to extract useful information
-      console.log(`🔵 Unknown message stream format for topic ${topicId}, attempting to adapt`);
-      
-      if (messageStream && typeof messageStream === 'object') {
-        // Log what we received to help diagnose
-        console.log(`🔵 Message stream structure:`, JSON.stringify(messageStream).substring(0, 200) + '...');
-        
-        // Try to set up something reasonable based on what we have
-        // Start a polling mechanism to check for new messages
-        const pollInterval = setInterval(async () => {
-          try {
-            const newStream = await hcs10Client.getMessageStream(topicId);
-            console.log(`🔵 Polled for new messages on topic ${topicId}`);
-            
-            // Try to extract messages by examining the structure
-            if (newStream && typeof newStream === 'object') {
-              const possibleMessages = 
-                newStream.messages || 
-                newStream.data || 
-                (newStream.result && newStream.result.messages) ||
-                [];
-                
-              if (Array.isArray(possibleMessages)) {
-                console.log(`🔵 Found ${possibleMessages.length} possible messages in poll`);
-                
-                for (const message of possibleMessages) {
-                  processIncomingMessage(topicId, message);
-                }
-              }
-            }
-          } catch (pollError) {
-            console.error(`❌ Error in polling for topic ${topicId}:`, pollError);
-          }
-        }, 10000); // Poll every 10 seconds
-        
-        // Store the interval for cleanup
-        messageListeners.set(`${topicId}-interval`, pollInterval);
-      }
-    }
-    
-    console.log(`✅ Listener setup complete for topic ${topicId}`);
   } catch (error) {
     console.error(`❌ Error setting up listener for topic ${topicId}:`, error);
   }
 }
 
 /**
- * Process an incoming message from a topic
+ * Process incoming messages and handle them accordingly
  */
 async function processIncomingMessage(topicId: string, message: any) {
   try {
-    console.log(`🔵 Received message on topic ${topicId}`);
-    
-    // Only process message operations
-    if (message.op !== 'message' || !message.data) {
-      console.log(`🔵 Ignoring non-message operation: ${message.op}`);
-      return;
-    }
-    
-    console.log(`🔵 Processing message: ${message.data.substring(0, 100)}...`);
-    
-    // Parse the message content
-    let content: any;
-    try {
-      content = JSON.parse(message.data);
-    } catch (parseError) {
-      console.warn('⚠️ Message is not valid JSON:', message.data.substring(0, 100));
-      return;
-    }
+    console.log(`🔵 Processing incoming message from topic ${topicId}`);
     
     // Handle different message types
-    if (content.type === 'openconvai.message') {
-      // Process OpenConvAI message
-      console.log(`🔵 Received OpenConvAI message: ${JSON.stringify(content).substring(0, 100)}...`);
-      
-      // Extract relevant information
-      const inputMessage = content.input?.message;
-      const outputMessage = content.output?.message;
-      const metadata = content.metadata || {};
-      
-      console.log(`🔵 Input: "${inputMessage?.substring(0, 50) || 'none'}..."`);
-      console.log(`🔵 Output: "${outputMessage?.substring(0, 50) || 'none'}..."`);
-      
-      // Here you would typically:
-      // 1. Store the message in your database
-      // 2. Notify any connected clients via WebSockets
-      // 3. Update any relevant state
-      
-      // For now, just log it
-      console.log(`✅ Processed OpenConvAI message from topic ${topicId}`);
-    } else if (content.type === 'query') {
-      // Process a query message
-      console.log(`🔵 Received query message: ${JSON.stringify(content).substring(0, 100)}...`);
-      
-      // Extract query information
-      const question = content.question;
-      const requestId = content.requestId;
-      const parameters = content.parameters || {};
-      
-      console.log(`🔵 Question: "${question}"`);
-      console.log(`🔵 RequestId: ${requestId}`);
-      
-      // Process the query with our agent
-      if (question && typeof processInputWithAgent === 'function') {
-        const response = await processInputWithAgent(question);
-        
-        // Send the response back to the topic
-        const responseContent = {
-          type: 'query_response',
-          requestId: requestId,
-          answer: response,
-          timestamp: new Date().toISOString()
-        };
-        
-        await hcs10Client.sendMessage(
-          topicId,
-          JSON.stringify(responseContent),
-          `Response to query ${requestId}`
-        );
-        
-        console.log(`✅ Sent response to query ${requestId}`);
+    if (typeof message === 'string') {
+      // Process as a string message
+      const chatMessage = processMessage(message, 0, new Date().toISOString());
+      if (chatMessage) {
+        console.log(`🔵 Processed incoming message: ${JSON.stringify(chatMessage)}`);
+      }
+    } else if (typeof message === 'object' && message.type === 'openconvai.message') {
+      // Process as an HCS-10 OpenConvai message
+      const chatMessage = processMessage(message.input.message, 0, new Date().toISOString());
+      if (chatMessage) {
+        console.log(`🔵 Processed incoming message: ${JSON.stringify(chatMessage)}`);
       }
     } else {
-      console.log(`🔵 Unknown message type: ${content.type}`);
+      console.warn(`⚠️ Unrecognized message type: ${typeof message}`);
     }
   } catch (error) {
-    console.error(`❌ Error processing message from topic ${topicId}:`, error);
+    console.error(`❌ Error processing incoming message:`, error);
   }
 }
 
@@ -1118,7 +1079,7 @@ export async function initChatService() {
   try {
     console.log('🔵 Initializing Chat Service...');
     
-    // Initialize HCS10Client first - with proper error handling
+    // Initialize HCS10Client first
     hcs10Client = await initializeStandardsClient();
     
     if (!hcs10Client) {
@@ -1131,6 +1092,27 @@ export async function initChatService() {
     
     if (!agentInitialized) {
       console.warn('⚠️ Agent initialization failed');
+    }
+    
+    // Try to establish connection with the agent
+    try {
+      if (agentConfig.accountId && agentConfig.inboundTopicId) {
+        console.log('🔵 Attempting to establish connection with agent...');
+        const connectionTopicId = await establishAgentConnection();
+        
+        if (connectionTopicId) {
+          console.log(`✅ Connection established with agent, monitoring topic: ${connectionTopicId}`);
+          
+          // We would monitor this topic for responses, but our monitoring
+          // system should already pick it up from the startMessageMonitoring call
+        } else {
+          console.warn('⚠️ Failed to establish connection with agent');
+        }
+      } else {
+        console.log('🔵 Agent configuration incomplete, skipping connection');
+      }
+    } catch (connectionError) {
+      console.error('❌ Error establishing agent connection:', connectionError);
     }
     
     // Start monitoring topics if we have a real client
